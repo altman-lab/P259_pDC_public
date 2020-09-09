@@ -1,0 +1,685 @@
+---
+title: 'P259: Publication figures and tables'
+subtitle: "Dendritic cells (pDC)"
+author: "Kim Dill-McFarland, kadm@uw.edu"
+date: "version `r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+editor_options:
+  chunk_output_type: console
+---
+
+```{r message=FALSE, warning=FALSE}
+#Create directories of outputs
+dir.create("publication/fig/", showWarnings = FALSE, recursive = TRUE)
+dir.create("publication/table/", showWarnings = FALSE, recursive = TRUE)
+
+#Load packages used across all data
+library(tidyverse)
+library(limma)
+#Set seed
+set.seed(4389)
+```
+
+# Tables
+## RNA-seq library and patient metadata
+
+```{r}
+attach("data_clean/P259_pDC_clean.RData")
+
+dat.pDC.voom$targets %>% 
+  select(libID, everything()) %>% 
+  arrange(libID) %>% 
+  write_csv(., "publication/table/TableS.metadata.csv")
+```
+
+### Patient summary demographics
+
+```{r}
+#Age
+dat.pDC.voom$targets %>% 
+  distinct(experiment, donorID, Age) %>% 
+  group_by(experiment) %>% 
+  summarise(.groups = "keep",
+            n = n(),
+            mean.age = mean(Age, na.rm=TRUE),
+            sd.age = sd(Age, na.rm=TRUE)/sqrt(n))
+#Sex
+dat.pDC.voom$targets %>% 
+  distinct(experiment, donorID, Sex) %>% 
+  count(experiment, Sex) %>% 
+  group_by(experiment) %>% 
+  mutate(pct = n/sum(n))
+```
+
+## RNA-seq normalized log2 counts
+
+```{r}
+#attach("data_clean/P259_pDC_clean.RData")
+
+as.data.frame(dat.pDC.voom$E) %>% 
+  rownames_to_column("geneName") %>% 
+#Save
+write_csv(., "publication/table/TableS.norm.log2.counts.csv")
+```
+
+## All contrast model results
+
+```{r message=FALSE}
+#Get all model results
+read_csv("results/gene_level/P259.1_gene_pval.csv") %>% 
+  #Add experiment variable
+  mutate(experiment = "P259_1") %>% 
+  bind_rows(read_csv("results/gene_level/P259.2_gene_pval.csv")) %>% 
+  #Fill in experiment variable
+  mutate(experiment = ifelse(is.na(experiment), "P259_2", experiment)) %>% 
+  #Keep only contrasts model 
+  filter(model == "contrasts") %>% 
+  #Reorder and rename variables
+  select(experiment, model, geneName, hgnc_symbol, group,
+         AveExpr:group) %>% 
+  rename(contrast = group) %>% 
+  arrange(experiment, geneName, contrast) %>% 
+#Save
+write_csv(., "publication/table/TableS.models.csv")
+```
+
+## GSEA results
+
+```{r message=FALSE}
+read_csv("results/GSEA_FoldChange/h_GSEA.result.csv") %>% 
+  rename(contrast = group) %>% 
+  #Add experiment variable
+  mutate(experiment = ifelse(grepl(".1", contrast), "P259_1", "P259_2")) %>%
+  #Set gene set variable
+  mutate(gene.set = "HALLMARK",
+         pathway = gsub("HALLMARK_", "", pathway)) %>% 
+  #Format contrast to match model results
+  mutate(contrast = gsub(".1", "", contrast),
+         contrast = gsub(".2", "", contrast),
+         contrast = gsub("[.]n"," - n", contrast),
+         contrast = gsub("[.]A"," - A", contrast),
+         contrast = gsub("[.]E"," - E", contrast)) %>% 
+  #Reorder variables
+  select(experiment, gene.set, pathway, contrast, everything()) %>% 
+  arrange(experiment, pathway, contrast) %>% 
+#Save
+write_csv(., "publication/table/TableS.GSEA.csv") 
+```
+
+# Figures
+## PCA
+
+```{r message=FALSE}
+library(cowplot)
+```
+
+Calculate PCA for P259.1 and P259.2
+
+```{r}
+#attach("data_clean/P259_pDC_clean.RData")
+
+PCA1 <- as.data.frame(dat.pDC.voom_1$E) %>% 
+  t() %>% 
+  prcomp(scale. = TRUE)
+
+#Extract axes labels
+PC1.label1 <- paste("PC1 (", 
+                    round(summary(PCA1)$importance[2,1]*100, digits=1), 
+                    "%)", sep="")
+PC2.label1 <-paste("PC2 (", 
+                   round(summary(PCA1)$importance[2,2]*100, digits=1), 
+                   "%)", sep="")
+
+PCA2 <- as.data.frame(dat.pDC.voom_2$E) %>% 
+  t() %>% 
+  prcomp(scale. = TRUE)
+
+#Extract axes labels
+PC1.label2 <- paste("PC1 (", 
+                    round(summary(PCA2)$importance[2,1]*100, digits=1), 
+                    "%)", sep="")
+PC2.label2 <-paste("PC2 (", 
+                   round(summary(PCA2)$importance[2,2]*100, digits=1), 
+                   "%)", sep="")
+```
+
+Combine experiments and metadata.
+
+```{r}
+# Extract PC values
+PCA.dat <- as.data.frame(PCA1$x) %>% 
+  rownames_to_column("libID") %>%
+  bind_rows(rownames_to_column(as.data.frame(PCA2$x),"libID")) %>% 
+  # Select PCs
+  dplyr::select(libID, PC1, PC2) %>% 
+  # Merge with metadata
+  left_join(dat.pDC.voom$targets, by="libID")
+```
+
+Plot PCAs
+
+```{r fig.width=8.5}
+#Define ggplot colors
+group.cols <- c("none:none"="#dadaeb",
+                "none:AntiIL5"="#9e9ac8",
+                "none:EOS.supp"="#54278f",
+                "HRV:none"="#c7e9c0",
+                "HRV:AntiIL5"="#74c476",
+                "HRV:EOS.supp"="#006d2c",
+                "flu:none"="#fdae6b",
+                "flu:AntiIL5"="#e6550d")
+
+PCA1 <- PCA.dat %>% 
+  filter(experiment=="P259_1") %>% 
+  
+  ggplot(aes(PC1, PC2, color=virus:IL5)) +
+  geom_point(size=5) +
+  #Beautify
+  theme_classic(base_size = 16) +
+  labs(x=PC1.label1, y=PC2.label1) +
+  coord_fixed(ratio=1)  +
+  scale_color_manual(values = group.cols, 
+                     labels = c("media", "+ EOS sup", 
+                              "+ RV", "+ RV + EOS sup"),
+                     name="") +
+  theme(legend.position = "bottom") +
+  guides(color=guide_legend(nrow=2))
+
+PCA2 <- PCA.dat %>% 
+  filter(experiment=="P259_2") %>% 
+  
+  ggplot(aes(PC1, PC2, color=virus:IL5)) +
+  geom_point(size=5) +
+  #Beautify
+  theme_classic(base_size = 16) +
+  labs(x=PC1.label2, y=PC2.label2) +
+  coord_fixed(ratio=1) +
+  scale_color_manual(values = group.cols, 
+                     labels = c("media", "+ Anti-IL5", 
+                                "+ RV", "+ RV + Anti-IL5"),
+                     name="") +
+  theme(legend.position = "bottom") +
+  guides(color=guide_legend(nrow=2))
+
+plot_grid(PCA1,PCA2, align = "hv", labels = c("A","B"))
+
+#Save
+ggsave("publication/fig/PCA.pdf", 
+       plot_grid(PCA1,PCA2, align = "hv", labels = c("A","B")),
+       width=10, height=5)
+```
+
+## Contrast model venn
+
+```{r}
+library(venn)
+```
+
+Genes significant for contrasts at FDR < 0.2
+
+```{r message=FALSE, fig.width=8.5}
+#Load pvalue results
+pval_1 <- read_csv("results/gene_level/P259.1_gene_pval.csv") %>% 
+  filter(model == "contrasts")
+pval_2 <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>% 
+  filter(model == "contrasts")
+
+#Set FDR cutoff
+fdr.list <- c(0.2)
+
+#Plot venns
+for(fdr.cutoff in fdr.list){
+  #P259.1
+  venn.list_1 <- list()
+  ##Signif for virus
+  venn.list_1[["RV-infected\nvs media"]] <- pval_1 %>% 
+    filter(group %in% c("none_HRV - none_none",
+                        "EOS.supp_HRV - EOS.supp_none") & 
+             adj.P.Val <= fdr.cutoff) %>% 
+    distinct(geneName) %>% 
+    select(geneName) %>% unlist(use.names = FALSE)
+  
+  ##Signif for treatment
+  venn.list_1[["- RV\nEOS supernatant\nvs none"]] <- pval_1 %>% 
+    filter(group == "EOS.supp_none - none_none" & 
+             adj.P.Val <= fdr.cutoff) %>% 
+    distinct(geneName) %>% 
+    select(geneName) %>% unlist(use.names = FALSE)
+  
+  venn.list_1[["+ RV\nEOS supernatant\nvs none"]] <- pval_1 %>% 
+    filter(group == "EOS.supp_HRV - none_HRV" & 
+             adj.P.Val <= fdr.cutoff) %>% 
+    distinct(geneName) %>% 
+    select(geneName) %>% unlist(use.names = FALSE)
+  
+  #P259.2
+  venn.list_2 <- list()
+  ##Signif for virus
+  venn.list_2[["RV-infected\nvs media"]] <- pval_2 %>% 
+    filter(group %in% c("none_HRV - none_none",
+                        "AntiIL5_HRV - AntiIL5_none") & 
+             adj.P.Val <= fdr.cutoff) %>% 
+    distinct(geneName) %>% 
+    select(geneName) %>% unlist(use.names = FALSE)
+  
+  ##Signif for treatment
+  venn.list_2[["- RV\nAnti-IL5 therapy\nvs none"]] <- pval_2 %>% 
+    filter(group == "AntiIL5_none - none_none" & 
+             adj.P.Val <= fdr.cutoff) %>% 
+    distinct(geneName) %>% 
+    select(geneName) %>% unlist(use.names = FALSE)
+  
+  venn.list_2[["+ RV\nAnti-IL5 therapy\nvs none"]] <- pval_2 %>% 
+    filter(group == "AntiIL5_HRV - none_HRV" & 
+             adj.P.Val <= fdr.cutoff) %>% 
+    distinct(geneName) %>% 
+    select(geneName) %>% unlist(use.names = FALSE)
+  
+  #Save
+  pdf(paste("publication/fig/contrast.venn_", fdr.cutoff, ".pdf", sep=""),
+      height=5, width=12)
+  par(mfrow = c(1,2)) 
+  venn(ilab=FALSE, zcolor = "style",ilcs=1.5, sncs=1.5, box=FALSE,
+       x=venn.list_1)
+  venn(ilab=FALSE, zcolor = "style",ilcs=1.5, sncs=1.5, box=FALSE,
+       x=venn.list_2)
+  dev.off()
+  
+  #Print to Rmd
+  par(mfrow = c(1,2)) 
+  venn(ilab=FALSE, zcolor = "style",ilcs=1.5, sncs=1.5, box=FALSE,
+       x=venn.list_1)
+  venn(ilab=FALSE, zcolor = "style",ilcs=1.5, sncs=1.5, box=FALSE,
+       x=venn.list_2)
+}
+```
+
+## Hallmark GSEA 
+### Enrichment score
+
+```{r message=FALSE, fig.width=8.5}
+#Load plotting function
+source("scripts/GSEA.score.plot.R")
+
+#Create plot
+gsea.plot(gsea = read_csv("results/GSEA_FoldChange/h_GSEA.result.csv"),
+          fdr.cut = 0.1, prefix = "H", print.plot = TRUE, 
+          save.plot = TRUE, height = 5, width = 11, 
+          outdir="publication/fig/")
+```
+
+### Mean fold change
+
+```{r}
+library(cowplot)
+library(ggrepel)
+```
+
+```{r message=FALSE, warning=FALSE, fig.width=8.5, fig.height=10}
+#List genes in each Hallmark term
+myGO <- fgsea::gmtPathways("data_clean/Broad_gmt/h.all.v7.1.symbols.gmt")
+GO.df <- plyr::ldply(myGO, rbind) %>% 
+  rename(term = `.id`) %>% 
+  pivot_longer(-term, values_to="hgnc_symbol")
+
+#Expression data
+#attach("data_clean/P259_pDC_clean.RData")
+
+#### Format data ####
+#Select genes of interest and format
+## P259.2
+h.combo.plot_2 <- as.data.frame(dat.pDC.voom_2$E) %>% 
+  rownames_to_column("geneName") %>% 
+  #Get HGNC symbols
+  left_join(dat.pDC.voom_2$genes) %>% 
+  select(hgnc_symbol, everything()) %>% 
+  #Filter to genes in terms
+  inner_join(GO.df) %>% 
+  select(term, hgnc_symbol, geneName, everything(), 
+         -c(`Previous symbols`:gene_biotype), -name) %>% 
+  #long format
+  pivot_longer(-c(term:geneName), names_to = "libID", 
+               values_to = "expression") %>% 
+  #Add metadata
+  mutate(experiment = "P259.2") %>% 
+  left_join(select(dat.pDC.voom_2$targets, donorID, libID, 
+                   IL5, virus.detail))
+
+## P259.1
+h.combo.plot_1 <- as.data.frame(dat.pDC.voom_1$E) %>% 
+  rownames_to_column("geneName") %>% 
+  #Get HGNC symbols
+  left_join(dat.pDC.voom_1$genes) %>% 
+  select(hgnc_symbol, everything()) %>% 
+  #Filter to genes in terms
+  inner_join(GO.df) %>% 
+  select(term, hgnc_symbol, geneName, everything(), 
+         -c(`Previous symbols`:gene_biotype), -name) %>% 
+  #long format
+  pivot_longer(-c(term:geneName), names_to = "libID", 
+               values_to = "expression") %>% 
+  #Add metadata
+  mutate(experiment = "P259.1") %>% 
+  left_join(select(dat.pDC.voom_1$targets, donorID,
+                   libID, IL5, virus.detail))
+
+#Combine data and calculate fold change
+h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>% 
+  mutate(group = paste(virus.detail, IL5, sep=".")) %>% 
+  select(-IL5, -virus.detail, -libID) %>% 
+  #Averages
+  group_by(term, hgnc_symbol, experiment, group) %>% 
+  summarise(meanE = mean(expression, na.rm=TRUE)) %>% 
+  #Fold change
+  pivot_wider(names_from = group, values_from = meanE) %>% 
+  rowwise() %>% 
+  #Simplify group names
+  mutate(
+    #Virus in untreated
+    virus.untreat_old = oldHRV.none-none.none,
+    virus.untreat_new = newHRV.none-none.none,
+    #Virus in treated
+    virus.treat_old1 = oldHRV.EOS.supp-none.EOS.supp,
+    virus.treat_old2 = oldHRV.AntiIL5-none.AntiIL5,
+    virus.treat_new = newHRV.AntiIL5-none.AntiIL5,
+    #Treatment in media
+    treat.media_1 = none.EOS.supp-none.none,
+    treat.media_2 = none.AntiIL5-none.none,
+    #Treatment in virus
+    treat.virus_old1 = oldHRV.EOS.supp-oldHRV.none,
+    treat.virus_old2 = oldHRV.AntiIL5-oldHRV.none,
+    treat.virus_new = newHRV.AntiIL5-newHRV.none) %>% 
+  ungroup() %>% 
+  
+  #long format
+  select(term:experiment, virus.untreat_old:treat.virus_new) %>% 
+  pivot_longer(virus.untreat_old:treat.virus_new) %>% 
+  drop_na(value) %>% 
+  
+  #Average old and new HRV values
+  separate(name, into=c("group"), sep="_") %>% 
+  group_by(term, hgnc_symbol, experiment, group) %>% 
+  summarise(value = mean(value, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  #Beautify for plotting
+  mutate(term = gsub("HALLMARK_","", term),
+         term = gsub("_"," ", term)) %>% 
+  mutate(col.group = ifelse(value <0, "down", "up")) %>% 
+  mutate(group = factor(group, levels=c("treat.media","treat.virus",
+                                        "virus.untreat","virus.treat")))
+
+#Set jitter
+pos <- position_jitter(width = 0.3, seed = 589, height = 0)
+
+#### List genes to label ####
+#Set max number of terms
+no.genes <- 5
+#Set gene sets of interest
+term.OI.ls <- c("INTERFERON ALPHA RESPONSE", "INTERFERON GAMMA RESPONSE",
+             "INFLAMMATORY RESPONSE",
+             "EPITHELIAL MESENCHYMAL TRANSITION")
+
+#Find genes with largest absolute fold change  
+to.label <- list()
+
+for(term.OI in term.OI.ls){
+  #If this term, find genes that go down with virus
+  if(term.OI == "EPITHELIAL MESENCHYMAL TRANSITION"){
+    genes.v <- h.combo.plot %>% 
+      filter(term ==term.OI &
+               group %in% c("virus.treat","virus.untreat")) %>% 
+      group_by(term, hgnc_symbol) %>% 
+      filter(max(value, na.rm=TRUE)<0) %>% 
+      summarise(max.fc = max(abs(value), na.rm=TRUE)) %>% 
+      ungroup() %>% 
+      slice_max(max.fc,n=no.genes) %>% 
+      distinct(hgnc_symbol)
+  } else{
+    #All other terms, find genes that go up with virus
+    genes.v <- h.combo.plot %>% 
+      filter(term ==term.OI &
+               group %in% c("virus.treat","virus.untreat")) %>% 
+      group_by(term, hgnc_symbol) %>% 
+      filter(min(value, na.rm=TRUE)>0) %>% 
+      summarise(max.fc = max(value, na.rm=TRUE)) %>% 
+      ungroup() %>% 
+      slice_max(max.fc,n=no.genes) %>% 
+      distinct(hgnc_symbol)
+  }
+
+  #Save genes to list object
+  to.label[[paste("v",term.OI,sep=".")]] <- genes.v
+  
+  #Find genes that go down with EOS supp
+  down.eos <- h.combo.plot %>% 
+    filter(term == term.OI & group %in% c("treat.media","treat.virus") &
+             experiment == "P259.1") %>% 
+    group_by(term, hgnc_symbol) %>% 
+    filter(max(value, na.rm=TRUE)<0) %>% 
+    ungroup() %>% 
+    distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
+  
+  #Find genes that go up with AntiIL5
+  up.aIL5 <- h.combo.plot %>% 
+    filter(term == term.OI & group %in% c("treat.media","treat.virus") &
+             experiment == "P259.2") %>% 
+    group_by(term, hgnc_symbol) %>% 
+    filter(min(value, na.rm=TRUE)>0) %>% 
+    ungroup() %>% 
+    distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
+  
+  #Concatenate to genes that go up/down with virus and down with EOS and 
+  # up with AntiIL5
+  ## i.e. follow the directions in the enrichment score plot
+  genes.t <- h.combo.plot %>% 
+    filter(term == term.OI &
+             group %in% c("virus.treat","virus.untreat")) %>% 
+    filter(hgnc_symbol %in% intersect(down.eos,up.aIL5)) %>% 
+    
+    group_by(term, hgnc_symbol) %>% 
+    filter(max(abs(value), na.rm=TRUE)>0) %>% 
+    summarise(max.fc = max(abs(value), na.rm=TRUE)) %>% 
+    ungroup() %>% 
+    slice_max(max.fc,n=no.genes) %>% 
+    distinct(hgnc_symbol)
+  
+  #Save to list object
+  to.label[[paste("t",term.OI,sep=".")]] <- genes.t
+}
+
+#Convert genes to label to df
+to.label.df <- data.table::rbindlist(to.label, idcol="name") %>% 
+  separate(name, into=c("vt","term"), sep="[.]") %>% 
+  mutate(group1 = ifelse(vt == "t", "treat.media", "virus.untreat"),
+         group2 = ifelse(vt == "t", "treat.virus", "virus.treat")) %>% 
+  pivot_longer(group1:group2, values_to="group") %>% 
+  dplyr::select(-name, -vt) %>% 
+  mutate(to.label = "y")
+
+#add genes to label info to other  plot data
+h.combo.plot.lab <- h.combo.plot %>% 
+  full_join(to.label.df, by = c("term", "hgnc_symbol", "group"))
+
+### FC plot data ####
+FC.plot.dat <- h.combo.plot.lab %>% 
+  #Beautify labels
+  mutate(group = paste(experiment, group, sep="_")) %>% 
+  mutate(group1 = recode_factor(factor(group),
+                  "P259.2_virus.treat"="+ Anti-IL5 therapy",
+                  "P259.2_virus.untreat"="- Anti-IL5 therapy",
+                  "P259.1_virus.treat"="+ EOS supernatant",
+                  "P259.1_virus.untreat"="- EOS supernatant",
+                                
+                  "P259.1_treat.virus"="+ RV",
+                  "P259.2_treat.virus"="+ RV",
+                  "P259.1_treat.media"="- RV",
+                  "P259.2_treat.media"="- RV"),
+         group2 = recode_factor(factor(group),
+                  "P259.1_virus.untreat"="RV-infected vs media",
+                  "P259.2_virus.untreat"="RV-infected vs media",
+                  "P259.1_virus.treat"="RV-infected vs media",
+                  "P259.2_virus.treat"="RV-infected vs media",
+                                
+                  "P259.1_treat.virus"="EOS supernatant vs none",
+                  "P259.2_treat.virus"="Anti-IL5 therapy vs none",
+                  "P259.1_treat.media"="EOS supernatant vs none",
+                  "P259.2_treat.media"="Anti-IL5 therapy vs none")) %>% 
+    #Reorder terms
+    mutate(term.ord = recode_factor(factor(term), 
+  "INTERFERON ALPHA RESPONSE"="INTERFERON\nALPHA\nRESPONSE",
+  "INTERFERON GAMMA RESPONSE"="INTERFERON\nGAMMA\nRESPONSE",
+  "INFLAMMATORY RESPONSE"="INFLAMMATORY\nRESPONSE",
+  "EPITHELIAL MESENCHYMAL TRANSITION"="EPITHELIAL\nMESENCHYMAL\nTRANSITION"))
+    
+#### FC plot: VIRUS ####
+dat.v <- FC.plot.dat %>% 
+  #Reorder terms
+      filter(group2 == "RV-infected vs media" &
+             term.ord %in% c("INTERFERON\nALPHA\nRESPONSE",
+                           "INTERFERON\nGAMMA\nRESPONSE",
+                           "INFLAMMATORY\nRESPONSE",
+                           "EPITHELIAL\nMESENCHYMAL\nTRANSITION"))
+
+plot.v <- dat.v %>% 
+      ggplot(aes(x = group1, y=value)) +
+      geom_violin() +
+      #Add non-labeled points
+      geom_jitter(data=filter(dat.v, is.na(to.label)),
+                  aes(color=col.group), position = pos) +
+      #Add labeled points
+      geom_point(data=filter(dat.v, !is.na(to.label)),
+                 aes(color=col.group), ) +
+      #Add labels left
+      geom_text_repel(data=filter(dat.v, !is.na(to.label)),
+                      aes(label=hgnc_symbol), direction="y",
+                      hjust=1, nudge_x=-0.4,
+                      show.legend = FALSE, size=3) +
+      #Add line at 0
+      #geom_hline(yintercept = 0, size=0.5) +
+      #Add mean lines
+      stat_summary(fun="mean", geom="crossbar")+
+      facet_grid(term.ord~group2, scales="free") +
+      coord_flip() +
+      #Beautify
+      theme_bw() +
+      labs(x="", y="Gene mean log2 fold change") +
+      scale_color_manual(values=c("down"="#6baed6","up"="#ef3b2c")) +
+      theme(strip.text.y = element_blank())+
+      theme(legend.position = "none",
+            panel.grid.major.y = element_blank(),
+            panel.grid.minor.y = element_blank(),
+            strip.background =element_rect(fill="white"))
+    #plot.v
+    
+#### FC plot: TREATMENT ####
+dat.t <- FC.plot.dat %>% 
+  filter(group2 != "RV-infected vs media" &
+           term.ord %in% c("INTERFERON\nALPHA\nRESPONSE",
+                           "INTERFERON\nGAMMA\nRESPONSE",
+                           "INFLAMMATORY\nRESPONSE",
+                           "EPITHELIAL\nMESENCHYMAL\nTRANSITION"))
+
+plot.t <- dat.t %>% 
+  ggplot(aes(x = group1, y=value)) +
+  geom_violin() +
+  #Add non-labeled points
+  geom_jitter(data=filter(dat.t, is.na(to.label)),
+              aes(color=col.group), position = pos) +
+  #Add labeled points
+  geom_point(data=filter(dat.t, !is.na(to.label)),
+             aes(color=col.group), ) +
+  #Add labels left
+  geom_text_repel(data=filter(dat.t, !is.na(to.label)),
+                  aes(label=hgnc_symbol), direction="y",
+                  hjust=1, nudge_x=-0.4,
+                  show.legend = FALSE, size=3) +
+  #Add line at 0
+  #geom_hline(yintercept = 0, size=0.5) +
+  #Add mean lines
+  stat_summary(fun="mean", geom="crossbar")+
+  facet_grid(term.ord~group2, scales="free") +
+  coord_flip() +
+  #Beautify
+  theme_bw() +
+  labs(x="", y="Gene mean log2 fold change") +
+  scale_color_manual(values=c("down"="#6baed6","up"="#ef3b2c")) +
+  theme(legend.position = "none",
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.background =element_rect(fill="white"))
+#plot.t
+
+#### Combine FC plots ####
+fc.plot.all <- plot_grid(plot.v, plot.t, ncol=2, rel_widths = c(0.6,1))
+fc.plot.all
+ggsave("publication/fig/H_GSEA_FoldChange.pdf", fc.plot.all, 
+       width = 20, height = 15)
+```
+
+## Genes of interest
+
+```{r}
+# List all genes to plot
+GOI <- c("CXCL10", "CXCL11")
+
+#Get results for genes of interest
+dat.GOI <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>% 
+  filter(hgnc_symbol %in% GOI) %>% 
+  dplyr::select(-term) %>% distinct()
+  
+plot.GOI <- dat.GOI %>% 
+  #Beautify labels
+  mutate(x.lab=paste(virus.detail,IL5, sep="_"),
+         x.lab=gsub("oldH|newH", "", x.lab),
+         x.lab=recode_factor(factor(x.lab),
+                             "none_none"="media",
+                             "none_EOS.supp"="+ EOS sup",
+                             "none_AntiIL5"="+ Anti-IL5",
+                             "RV_none"="+ RV",
+                             "RV_EOS.supp"="+ RV\n+ EOS sup",
+                             "RV_AntiIL5"="+ RV\n+ Anti-IL5")) %>% 
+  mutate(ex.lab = recode_factor(factor(experiment),
+                      "P259.1"="EOS supernatant\nin healthy donors",
+                      "P259.2"="Anti-IL5 therapy\nin asthma donors")) %>% 
+  arrange(x.lab) %>% 
+
+  #Plot
+  ggplot(aes(x=x.lab, y=expression, color=donorID)) +
+  geom_jitter(width=0.1, height=0) +
+  #Add mean and error bars
+  stat_summary(fun.data=mean_sdl, 
+               fun.args = list(mult=1), 
+               geom="errorbar", color="black", width=0.1) +
+  stat_summary(fun=mean, geom="errorbar", 
+               aes(ymax=..y.., ymin=..y..),
+               color="black", width=0.25) +
+  #facet experiments and genes
+  facet_grid(hgnc_symbol~ex.lab, scales="free") +
+  #Beautify
+  theme_bw() +
+  labs(x="", y="Normalized log2 expression") +
+  theme(legend.position = "none",
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.background =element_rect(fill="white"))
+
+plot.GOI
+ggsave("publication/fig/GOI.pdf", plot.GOI,
+       height=6, width=6)
+```
+
+# R session
+
+```{r}
+sessionInfo()
+```
+
+***

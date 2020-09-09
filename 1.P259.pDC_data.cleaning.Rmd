@@ -1,0 +1,837 @@
+---
+title: 'P259: Combined data cleaning'
+subtitle: "Dendritic cells (pDC)"
+author: "Kim Dill-McFarland, kadm@uw.edu"
+date: "version `r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+editor_options:
+  chunk_output_type: console
+always_allow_html: true
+---
+# Background
+
+P259.1: pDC were isolated from 4 healthy donors' whole blood or buffy coat. Cells were adapted to media with IL3 and then cultured with eosinophil (EOS) supernatant and/or human rhinovirus (RV).
+
+P259.2: pDC were isolated from 7 asthmatic donors' whole blood, 4 of which were on Anti-IL5 therapy. Cells were adapted to media with IL3 and then cultured with or without RV.
+
+The purpose of this workflow is to complete quality control and data cleaning of metadata and RNA-seq libraries generated from the above experiments. This includes 1) removing low coverage libraries, 2) filtering rare genes, 3) removing outlying libraries, and 4) normalizing for RNA composition. 
+
+# Setup
+Load packages
+
+```{r message=FALSE, warning=FALSE}
+# Data manipulation and figures
+library(tidyverse)
+  #Multi-panel figures
+  library(cowplot)
+  # Modify ggplot figures to non-overlapping text labels
+  library(ggrepel)
+  # Modify ggplot data order within facets
+  library(drlib)
+  # Plot log scales
+  library(scales)
+# Reading Excel files
+library(readxl)
+# Working with dates
+library(lubridate)
+
+# Empirical analysis of digital gene expression data
+## Data normalization
+library(edgeR)
+
+# Print pretty table to knit file
+library(knitr)
+library(kableExtra)
+  options(knitr.kable.NA = '')
+  
+#Define colors for plots
+group.cols <- c("none:none"="#dadaeb",
+               "none:AntiIL5"="#9e9ac8",
+               "none:EOS.supp"="#54278f",
+               "HRV:none"="#c7e9c0",
+               "HRV:AntiIL5"="#74c476",
+               "HRV:EOS.supp"="#006d2c",
+               "flu:none"="#fdae6b",
+               "flu:AntiIL5"="#e6550d")
+samp.cols <- c("AC1"="#969696",
+               "AC2"="#a6cee3",
+               "AC3"="#1f78b4",
+               "AC4"="#b2df8a",
+               "AC5"="#33a02c",
+               "AT1"="#fb9a99",
+               "AT2"="#e31a1c",               
+               "AT3"="#fdbf6f",
+               "AT4"="#ff7f00",
+               "donor1"="#cab2d6",
+               "donor2"="#6a3d9a",
+               "donor3"="#ffff99",
+               "donor4"="#b15928")
+```
+
+Set seed
+
+```{r}
+set.seed(4389)
+```
+
+# Read in and format data 
+## Metadata
+
+```{r echo=FALSE, message=FALSE}
+meta <- read_csv("data_clean/P259_pDC_metadata.csv") %>% 
+  #Set factosr and orders
+  mutate(IL5 = factor(IL5, levels = c("none","AntiIL5","EOS.supp")),
+         virus = factor(virus, levels=c("none","HRV")),
+         virus.detail = factor(virus.detail,
+                               levels=c("none","oldHRV","newHRV"))) %>% 
+  arrange(libID)
+```
+
+## Counts table
+
+Read in counts table from P259.1 and P259.2 (`data_raw/*combined_counts.csv`) and then combine to one data frame.
+
+```{r echo=FALSE, message=FALSE}
+count.raw1 <- read_csv("data_raw/P216-1_CCLKLANXX_180806_combined_counts.csv") %>% 
+  # Remove '_CE03HANXX' suffix from variable names
+  rename_at(.vars = vars(ends_with("_CCLKLANXX")),
+            .funs = ~sub("_CCLKLANXX", "", .))
+```
+
+```{r echo=FALSE, message=FALSE}
+count.raw2 <- read_csv("data_raw/P259-2_CE03HANXX_191107_combined_counts.csv") %>% 
+  # Remove '_CE03HANXX' suffix from variable names
+  rename_at(.vars = vars(ends_with("_CE03HANXX")),
+            .funs = ~sub("_CE03HANXX", "", .))
+```
+
+```{r echo=FALSE, message=FALSE}
+count.all <- full_join(count.raw1, count.raw2,
+                       by = "geneName")
+```
+
+Read in and filter associated gene key (`data_raw/2020.06.18_HGNC.gene.key.txt`, downloaded from <https://www.genenames.org/download/custom/>) to protein coding (pc) genes that occur in the count data set and have valid hgnc symbols. 
+
+```{r echo=FALSE, message=FALSE}
+key <- read_tsv("data_raw/2020.06.18_HGNC.gene.key.txt",
+                na=c("")) %>% 
+  # rename variable to match count data
+  dplyr::rename(geneName = "Ensembl gene ID",
+                hgnc_symbol = "Approved symbol",
+                gene_biotype = "Locus group") %>% 
+  #remove genes w/o ensembl ID
+  drop_na(geneName) %>% 
+  #collapse multi-annotations
+  group_by(geneName) %>% 
+  mutate(across(c(gene_biotype, hgnc_symbol), 
+                ~paste(unique(.), collapse=", "))) %>% 
+  distinct()
+  
+key.pc <- key %>% 
+  # Keep protein coding genes only
+  filter(gene_biotype == "protein-coding gene") %>% 
+  # Keep genes in counts data
+  filter(geneName %in% count.all$geneName) %>% 
+  # Remove duplicate entries
+  distinct(geneName, .keep_all=TRUE) %>% 
+  arrange(geneName)
+```
+
+Then filter the count data to pc genes and save.
+
+```{r echo=FALSE, message=FALSE}
+count.pDC <- count.all %>% 
+  filter(geneName %in% key.pc$geneName) %>% 
+  arrange(geneName) %>% 
+  #Order columns and keep only pDC data
+  select(geneName, all_of(meta$libID))
+```
+
+```{r}
+#Save counts table
+write_csv(count.pDC, "data_clean/P259_pDC_counts.csv")
+```
+
+```{r echo=FALSE}
+#Remove intermed files
+rm(count.raw1, count.raw2, count.all, key)
+```
+
+#### Verify data order
+
+To ensure that all data match, check that all libraries in the count data are present and in the same order in the metadata. And vice versa.
+
+```{r echo=FALSE, message=FALSE}
+identical(meta$libID, colnames(count.pDC)[-1])
+```
+
+## Sample summary
+
+At this point, the following objects exist in our environment. Protein coding = pc
+
+```{r echo=FALSE}
+ls()
+```
+
+And the sample numbers are
+
+```{r echo=FALSE}
+meta %>% 
+  group_by(experiment, asthma,IL5,virus) %>% 
+  tally() %>% 
+  arrange(experiment, asthma,IL5,virus) %>% 
+  
+  kable(align="c") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE) %>% 
+  collapse_rows(1:2, valign="top")
+```
+
+# Data cleaning
+## Median CV coverage vs. mapped duplicate reads
+
+Compare the median coefficient of variation (CV) coverage (`median_cv_coverage`) and percent alignment of reads with duplicates (`mapped_reads_w_dups`).
+
+```{r echo=FALSE, fig.height=4, fig.width=8.5}
+# Plot libraries
+meta %>% 
+  #Create color group for total sequences
+  mutate(col.group = ifelse(total_sequences <= 1e5, "<100,000",
+                     ifelse(total_sequences <= 3e5, "<300,000",
+                     ifelse(total_sequences <= 5e5, "<500,000",
+                            ">500,000")))) %>% 
+  
+ggplot(aes(median_cv_coverage, mapped_reads_w_dups)) +
+  geom_point(aes(color=col.group, shape=experiment), size=2) +
+  #Label points outside cutoffs
+  geom_text_repel(data=filter(meta, median_cv_coverage > 0.6 | 
+                              mapped_reads_w_dups < 0.7),
+            aes(label=libID), show.legend = FALSE) +
+ #Beautify
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  labs(x="Median CV coverage", y="Mapped reads with duplicates",
+       color="Total sequences") +
+  lims(x=c(0,1), y=c(0,1)) +
+  scale_color_manual(values = c("#cbc9e2","#9e9ac8","#756bb1","#54278f"))
+```
+
+## Total aligned counts
+
+Plot total counts per library. Here, we compare our standard cutoff of 500,000 to a less strict cutoff of 100,000, because `r nrow(filter(meta, total_sequences <= 5E5))` pDC libraries would be removed at the standard cutoff. 
+
+```{r echo=FALSE, fig.height=4, fig.width=8.5}
+meta %>% 
+  #Create color group for total sequences
+  mutate(col.group = ifelse(total_sequences <= 1e5, "<100,000",
+                     ifelse(total_sequences <= 3e5, "<300,000",
+                     ifelse(total_sequences <= 5e5, "<500,000",
+                            ">500,000")))) %>% 
+  
+ggplot(aes(x=reorder_within(libID, by=total_sequences,
+                            within=experiment), 
+           y=total_sequences, fill=col.group))  +
+  geom_col() +
+  # Facet by cell type
+  facet_grid(~experiment, scales="free_x", space="free") +
+  # Add cutoff line
+  geom_hline(yintercept = 1E5) +
+  geom_hline(yintercept = 5E5, lty=2) +
+  # Beautify
+  theme_classic() +
+  theme(axis.text.x = element_text(size=rel(0.75),
+                                   angle = 90, hjust = 1),
+        legend.position = "bottom") +
+  labs(x="Library", y="Total aligned counts\n(Log scale)", fill="") +
+  scale_x_reordered() +
+  scale_fill_manual(values = c("#cbc9e2","#9e9ac8","#756bb1","#54278f")) +
+  scale_y_continuous(trans = 'log10',
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x)))
+```
+
+## Filter by quality and coverage
+
+Thus, the following libraries with questionable metrics (highlighted in red in HTML format) may be removed.
+
+```{r echo=FALSE}
+to_remove <- meta %>% 
+  filter(total_sequences <= 5E5 | 
+         median_cv_coverage > 0.6 |
+         mapped_reads_w_dups < 0.75)
+
+to_remove %>% 
+  mutate(median_cv_coverage = cell_spec(median_cv_coverage, "html",
+                              color = ifelse(median_cv_coverage > 0.6,
+                                             "red", "darkgrey")),
+         mapped_reads_w_dups = cell_spec(mapped_reads_w_dups, "html",
+                              color = ifelse(mapped_reads_w_dups < 0.75,
+                                             "red", "darkgrey")),
+         total_sequences = cell_spec(total_sequences, "html",
+                              color = ifelse(total_sequences <= 1E5,
+                                             "red", "darkgrey"))) %>%
+  select(experiment, libID, donorID, asthma,IL5,virus,
+      median_cv_coverage, mapped_reads_w_dups, total_sequences) %>% 
+  arrange(libID) %>% 
+  
+  kable(align="c", format = "html", escape = FALSE) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+First, 3 libraries with < 100,000 sequences are removed. Since this removes the media (none:none) sample for donor AC1, all other AC1 samples are also removed. Of note, if the other AC1 samples are retained, they appears as PCA outliers in the next step.
+
+```{r}
+#Metadata
+meta.filter <- meta %>% 
+  # CV coverage and alignment
+  filter(total_sequences >= 1E5) %>% 
+  filter(donorID != "AC1") %>% 
+  droplevels()
+
+#Count data
+count.pDC.filter <- count.pDC %>% 
+  # Keep libraries (columns) remaining filtered metadata table (rows)
+  dplyr::select(geneName, as.character(meta.filter$libID))
+```
+
+## Filter PCA outliers
+
+Next, samples are assessed in PCA to determine if remaining questionable quality samples (labeled with libID) appear as PCA outliers.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+PCA.all <- count.pDC.filter %>% 
+  column_to_rownames("geneName") %>% 
+  #Convert to log counts per million
+  cpm(., log=TRUE) %>% 
+  t() %>% 
+  #Calc PCA
+  prcomp()
+  
+#Extract axes labels with percent contribution of PC
+PC1.label <- paste("PC1 (", summary(PCA.all)$importance[2,1]*100, "%)", sep="")
+PC2.label <- paste("PC2 (", summary(PCA.all)$importance[2,2]*100, "%)", sep="")
+
+# Extract PC values
+PCA.dat <- as.data.frame(PCA.all$x) %>% 
+    rownames_to_column("libID") %>%
+    # Select PCs for plotting
+    dplyr::select(libID, PC1:PC3) %>% 
+    # Merge with metadata
+    left_join(meta.filter, by="libID")
+
+PCA1 <- ggplot(PCA.dat, aes(PC1, PC2, color=virus:IL5)) +
+      geom_point(size=2, stroke=1.5) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nlogCPM") +
+      coord_fixed(ratio=1) +
+      scale_shape_manual(values=c(21,16)) +
+      guides(color=guide_legend(title.position="top", 
+                                title.hjust = 0.5))+
+      scale_color_manual(values = group.cols)
+
+PCA2 <- ggplot(PCA.dat, aes(PC1, PC2, color=donorID)) +
+      geom_point(size=2, stroke=1.5) +
+      geom_text_repel(data=filter(PCA.dat, 
+                                  libID %in% to_remove$libID),
+                      aes(label=libID), show.legend = FALSE) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nlogCPM") +
+      coord_fixed(ratio=1) +
+      scale_color_manual(values=samp.cols)
+```
+
+```{r PCA.outlier, echo=FALSE, message=FALSE}
+PCA.all.sd <- PCA.dat %>% 
+  group_by(virus, IL5) %>% 
+  #Calculate PC mean std deviation
+  summarise(.groups="keep",
+    PC1.mean = mean(PC1),
+    PC1.sd = sd(PC1),
+    PC2.mean = mean(PC2),
+    PC2.sd = sd(PC2)) %>% 
+  #Calculate +/- 3 sd limits
+  mutate(
+    PC1.min = PC1.mean-(3*PC1.sd),
+    PC1.max = PC1.mean+(3*PC1.sd),
+    PC2.min = PC2.mean-(3*PC2.sd),
+    PC2.max = PC2.mean+(3*PC2.sd))
+  
+PCA.all.dat <- PCA.dat %>%   
+  full_join(PCA.all.sd) %>% 
+  #ID potential outliers
+  mutate(col.group = ifelse(PC1 > PC1.max | PC1 < PC1.min |
+                            PC2 > PC2.max | PC2 < PC2.min, 
+                            "potential outlier", "okay"))
+
+PCA3 <- PCA.all.dat %>%       
+  ggplot(aes(PC1, PC2)) +
+  geom_point(aes(color=col.group),size=2) + 
+  geom_text_repel(data=filter(PCA.all.dat,
+                            col.group == "potential outlier"),
+            aes(label=libID), show.legend = FALSE) +
+  #Beautify
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom") +
+  labs(x=PC1.label, y=PC2.label, 
+       title="pDC experiment\nlogCPM") +
+  coord_fixed(ratio=1) +
+  scale_color_manual(values = c("#969696","#b10026"))
+```
+
+```{r echo=FALSE, fig.height=8, fig.width=8.5}
+plot_grid(PCA1,PCA2,PCA3, align = "v", ncol=1, axis="l")
+```
+
+Donor AC2 appears to be an outlier for all of its samples and will be removed.
+
+```{r}
+#Metadata
+meta.filter2 <- meta.filter %>% 
+  filter(donorID != "AC2") %>% 
+  droplevels()
+
+#Count data
+count.pDC.filter2 <- count.pDC.filter %>% 
+  # Keep libraries (columns) remaining filtered metadata table (rows)
+  dplyr::select(geneName, as.character(meta.filter2$libID))
+```
+
+Re-assess PCA.  
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+PCA.all <- count.pDC.filter2 %>% 
+  column_to_rownames("geneName") %>% 
+  #Convert to log counts per million
+  cpm(., log=TRUE) %>% 
+  t() %>% 
+  #Calc PCA
+  prcomp()
+  
+#Extract axes labels with percent contribution of PC
+PC1.label <- paste("PC1 (", summary(PCA.all)$importance[2,1]*100, "%)", sep="")
+PC2.label <- paste("PC2 (", summary(PCA.all)$importance[2,2]*100, "%)", sep="")
+
+# Extract PC values
+PCA.dat <- as.data.frame(PCA.all$x) %>% 
+    rownames_to_column("libID") %>%
+    # Select PCs for plotting
+    dplyr::select(libID, PC1:PC3) %>% 
+    # Merge with metadata
+    left_join(meta.filter2, by="libID")
+
+PCA1 <- ggplot(PCA.dat, aes(PC1, PC2, color=virus:IL5)) +
+      geom_point(size=2, stroke=1.5) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nlogCPM") +
+      coord_fixed(ratio=1) +
+      scale_shape_manual(values=c(21,16)) +
+      guides(color=guide_legend(title.position="top", 
+                                title.hjust = 0.5))+
+      scale_color_manual(values = group.cols)
+
+PCA2 <- ggplot(PCA.dat, aes(PC1, PC2, color=donorID)) +
+      geom_point(size=2, stroke=1.5) +
+      geom_text_repel(data=filter(PCA.dat, 
+                                  libID %in% to_remove$libID),
+                      aes(label=libID), show.legend = FALSE) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nlogCPM") +
+      coord_fixed(ratio=1) +
+      scale_color_manual(values=samp.cols)
+```
+
+```{r PCA.outlier2, echo=FALSE, message=FALSE}
+PCA.all.sd <- PCA.dat %>% 
+  group_by(virus, IL5) %>% 
+  #Calculate PC mean std deviation
+  summarise(.groups="keep",
+    PC1.mean = mean(PC1),
+    PC1.sd = sd(PC1),
+    PC2.mean = mean(PC2),
+    PC2.sd = sd(PC2)) %>% 
+  #Calculate +/- 3 sd limits
+  mutate(
+    PC1.min = PC1.mean-(3*PC1.sd),
+    PC1.max = PC1.mean+(3*PC1.sd),
+    PC2.min = PC2.mean-(3*PC2.sd),
+    PC2.max = PC2.mean+(3*PC2.sd))
+  
+PCA.all.dat <- PCA.dat %>%   
+  full_join(PCA.all.sd) %>% 
+  #ID potential outliers
+  mutate(col.group = ifelse(PC1 > PC1.max | PC1 < PC1.min |
+                            PC2 > PC2.max | PC2 < PC2.min, 
+                            "potential outlier", "okay"))
+
+PCA3 <- PCA.all.dat %>%       
+  ggplot(aes(PC1, PC2)) +
+  geom_point(aes(color=col.group),size=2) + 
+  geom_text_repel(data=filter(PCA.all.dat,
+                            col.group == "potential outlier"),
+            aes(label=libID), show.legend = FALSE) +
+  #Beautify
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom") +
+  labs(x=PC1.label, y=PC2.label, 
+       title="pDC experiment\nlogCPM") +
+  coord_fixed(ratio=1) +
+  scale_color_manual(values = c("#969696","#b10026"))
+```
+
+```{r echo=FALSE, fig.height=10, fig.width=8.5}
+plot_grid(PCA1,PCA2,PCA3, align = "hv", ncol=2, axis="l")
+```
+
+Additionally, lib44585 was flagged for poor-quality above and is labeled in the PCA. While this sample is somewhat of an outlier in PCA, it is not > 3 s.d. away from its group's mean. Thus, it will remain and be re-assessed after gene filtering.
+
+Therefore, the filtered data have 
+
+* max median CV coverage = `r round(max(meta.filter2$median_cv_coverage), digits=2)`
+* min mapped reads with duplicates = `r round(min(meta.filter2$mapped_reads_w_dups), digits=2)`
+* min total sequences = `r scales::comma_format()(min(meta.filter2$total_sequences))`
+
+## Normalize for RNA composition
+
+Create DGEList object
+
+```{r}
+dat.pDC.filter2 <- DGEList(
+  #count table. move gene names to column names
+  counts=as.matrix(column_to_rownames(count.pDC.filter2, "geneName")),
+  #metadata
+  samples=meta.filter2,
+  #keep genes in count table
+  genes=filter(key.pc, geneName %in% count.pDC.filter2$geneName))
+```
+
+## Filter rare genes
+
+The raw gene sets contain highly variable, low abundance/rare genes. Genes must be at least 1 CPM in at least 3 samples to remain.
+
+```{r}
+source("https://raw.githubusercontent.com/kdillmcfarland/R_bioinformatic_scripts/master/RNAseq_rare_gene_filter.R")
+
+rare.gene.filter(dat.pDC.filter2, 
+                 min.CPM=1,
+                 min.sample=3, 
+                 name="dat.pDC.filter2.abund")
+```
+
+```{r echo=FALSE, warning=FALSE}
+#Calc normalization factors
+dat.pDC.filter2.norm <- calcNormFactors(dat.pDC.filter2)
+
+#voom normalize
+temp <- voomWithQualityWeights(dat.pDC.filter2.norm, 
+     design=model.matrix(~ IL5 + virus,
+                         data=dat.pDC.filter2.norm$samples),
+     plot=FALSE, save.plot = TRUE)
+
+MV1 <- data.frame(
+  x = temp$voom.xy$x, 
+  y = temp$voom.xy$y,
+  linex = temp$voom.line$x, 
+  liney = temp$voom.line$y) %>% 
+  
+  ggplot() +
+  geom_point(aes(x=x, y=y), size=0.5) +
+  geom_path(aes(x=linex, y=liney), color="red") +
+  theme_classic() +
+  labs(x="log2( count size + 0.5 )", y="Sqrt (stdev)",
+       title="All genes")
+```
+
+```{r echo=FALSE}
+#Calc normalization factors
+dat.pDC.filter2.abund.norm <- calcNormFactors(dat.pDC.filter2.abund)
+
+#Voom normalize
+dat.pDC.filter2.abund.norm.voom <- voomWithQualityWeights(dat.pDC.filter2.abund.norm, 
+     design=model.matrix(~ IL5 + virus,
+            data=dat.pDC.filter2.abund.norm$samples),
+     plot=FALSE, save.plot = TRUE)
+
+#plot mean-var trend
+MV2 <- data.frame(
+  x = dat.pDC.filter2.abund.norm.voom$voom.xy$x, 
+  y = dat.pDC.filter2.abund.norm.voom$voom.xy$y,
+  linex = dat.pDC.filter2.abund.norm.voom$voom.line$x, 
+  liney = dat.pDC.filter2.abund.norm.voom$voom.line$y) %>% 
+  
+  ggplot() +
+  geom_point(aes(x=x, y=y), size=0.5) +
+  geom_path(aes(x=linex, y=liney), color="red") +
+  theme_classic() +
+  labs(x="log2( count size + 0.5 )", y="Sqrt (stdev)",
+       title="Abundant genes")
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=8.5}
+plot_grid(MV1, MV2)
+```
+
+```{r echo=FALSE}
+genes <- nrow(dat.pDC.filter2.norm$genes)
+genes.abund <- nrow(dat.pDC.filter2.abund.norm$genes)
+```
+
+This removes `r genes-genes.abund` (~ `r round((genes-genes.abund)/genes*100, digits=0)`%) genes. This sufficiently filters these data as indicated by a decreasing variance trend for lowly abundant genes.
+
+## PCA
+
+We see that previously questionable samples (labeled with libID) are sufficiently normalized to not appear as PCA outliers.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+PCA.all <- as.data.frame(dat.pDC.filter2.abund.norm.voom$E) %>% 
+  t() %>% 
+  #Calc PCA
+  prcomp()
+  
+#Extract axes labels with percent contribution of PC
+PC1.label <- paste("PC1 (", summary(PCA.all)$importance[2,1]*100, "%)", sep="")
+PC2.label <- paste("PC2 (", summary(PCA.all)$importance[2,2]*100, "%)", sep="")
+
+# Extract PC values
+PCA.dat <- as.data.frame(PCA.all$x) %>% 
+    rownames_to_column("libID") %>%
+    # Select PCs for plotting
+    dplyr::select(libID, PC1:PC3) %>% 
+    # Merge with metadata
+    left_join(meta.filter2, by="libID")
+
+PCA1 <- ggplot(PCA.dat, aes(PC1, PC2, color=virus:IL5)) +
+      geom_point(size=2, stroke=1.5) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nvoom normalized abundant logCPM") +
+      coord_fixed(ratio=1) +
+      scale_shape_manual(values=c(21,16)) +
+      guides(color=guide_legend(title.position="top", 
+                                title.hjust = 0.5))+
+      scale_color_manual(values = group.cols)
+
+PCA2 <- ggplot(PCA.dat, aes(PC1, PC2, color=donorID)) +
+      geom_point(size=2, stroke=1.5) +
+      geom_text_repel(data=filter(PCA.dat, 
+                                  libID %in% to_remove$libID),
+                      aes(label=libID), show.legend = FALSE) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nvoom normalized abundant logCPM") +
+      coord_fixed(ratio=1) +
+      scale_color_manual(values=samp.cols)
+```
+
+```{r PCA.outlier3, echo=FALSE, message=FALSE}
+PCA.all.sd <- PCA.dat %>% 
+  group_by(virus, IL5) %>% 
+  #Calculate PC mean std deviation
+  summarise(.groups="keep",
+    PC1.mean = mean(PC1),
+    PC1.sd = sd(PC1),
+    PC2.mean = mean(PC2),
+    PC2.sd = sd(PC2)) %>% 
+  #Calculate +/- 3 sd limits
+  mutate(
+    PC1.min = PC1.mean-(3*PC1.sd),
+    PC1.max = PC1.mean+(3*PC1.sd),
+    PC2.min = PC2.mean-(3*PC2.sd),
+    PC2.max = PC2.mean+(3*PC2.sd))
+  
+PCA.all.dat <- PCA.dat %>%   
+  full_join(PCA.all.sd) %>% 
+  #ID potential outliers
+  mutate(col.group = ifelse(PC1 > PC1.max | PC1 < PC1.min |
+                            PC2 > PC2.max | PC2 < PC2.min, 
+                            "potential outlier", "okay"))
+
+PCA3 <- PCA.all.dat %>%       
+  ggplot(aes(PC1, PC2)) +
+  geom_point(aes(color=col.group),size=2) + 
+  geom_text_repel(data=filter(PCA.all.dat,
+                            col.group == "potential outlier"),
+            aes(label=libID), show.legend = FALSE) +
+  #Beautify
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom") +
+  labs(x=PC1.label, y=PC2.label, 
+       title="pDC experiment\nvoom normalized abundant logCPM") +
+  coord_fixed(ratio=1) +
+  scale_color_manual(values = c("#969696","#b10026"))
+```
+
+```{r echo=FALSE, fig.height=10, fig.width=8.5}
+plot_grid(PCA1,PCA2,PCA3, align = "hv", ncol=2, axis="l")
+```
+
+## Summary
+
+The following final quality cutoffs were applied to the data:
+
+* Library median CV coverage $\leq$ `r round(max(dat.pDC.filter2.abund.norm.voom$targets$median_cv_coverage), digits=2)`
+* Library mapped reads with duplicates $\geq$ `r round(min(dat.pDC.filter2.abund.norm.voom$targets$mapped_reads_w_dups), digits=2)`
+* Library total counts $\geq$ `r min(dat.pDC.filter2.abund.norm.voom$targets$total_sequences)`
+* Libraries from donor AC1 due to loss of media sample in previous filtering
+* Within 3 sd of group mean on PCA (*e.g.* not outliers)
+* Genes at least 1 CPM in at least 3 samples
+
+```{r echo=FALSE, fig.height=4, fig.width=8.5}
+# Plot libraries
+meta %>% 
+  #Create color group for removed samples
+  mutate(col.group = ifelse(libID %in% dat.pDC.filter2$samples$libID,
+                            "Retained","Removed")) %>% 
+  
+ggplot(aes(median_cv_coverage, mapped_reads_w_dups)) +
+  geom_point(aes(color=col.group, shape=experiment), size=2) +
+  geom_hline(yintercept = 0.85, lty=2) +
+  geom_vline(xintercept = 0.85, lty=2) +
+  scale_y_continuous(breaks = sort(c(seq(0,1,length.out=5), 0.85)),
+                    limits = c(0,1)) +
+  scale_x_continuous(breaks = sort(c(seq(0,1, length.out=5), 0.85)),
+                     limits = c(0,1)) +
+  #Beautify
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  labs(x="Median CV coverage", y="Mapped reads with duplicates",
+       color="Total sequences",
+       title="Median CV coverage vs. mapped duplicate reads")
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=8.5}
+meta %>% 
+  #Create color group for removed samples
+  mutate(col.group = ifelse(libID %in% dat.pDC.filter2$samples$libID,
+                            "Retained","Removed")) %>% 
+  
+ggplot(aes(x=reorder_within(libID, by=total_sequences,
+                            within=experiment), 
+           y=total_sequences, fill=col.group))  +
+  geom_col() +
+  # Facet by cell type
+  facet_grid(~experiment, scales="free_x", space="free") +
+  # Add cutoff line
+  geom_hline(yintercept = 1E5, lty=2) +
+  # Beautify
+  theme_classic() +
+  theme(axis.text.x = element_text(size=rel(0.75),
+                                   angle = 90, hjust = 1),
+        legend.position = "bottom") +
+  labs(x="Library", y="Total aligned counts\n(Log scale)", fill="",
+       title="Total aligned counts") +
+  scale_x_reordered() +
+  scale_y_continuous(trans = 'log10',
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x)))
+```
+
+```{r echo=FALSE}
+filter.dup <- meta %>% 
+  filter(mapped_reads_w_dups <= 0.85) %>% 
+  mutate(filter = "mapped dup reads")
+filter.cv <- meta %>% 
+  filter(median_cv_coverage >= 0.85)%>% 
+  mutate(filter = "CV coverage")
+filter.seq <- meta %>% 
+  filter(total_sequences <= 1E5)%>% 
+  mutate(filter = "total seqs")
+filter.AC1 <- meta %>% 
+  filter(donorID == "AC1" & virus != "none")%>% 
+  mutate(filter = "no media-only sample")
+filter.AC2 <- meta %>% 
+  filter(donorID == "AC2")%>% 
+  mutate(filter = "PCA outlier")
+
+bind_rows(filter.dup,filter.cv,filter.seq,
+          filter.AC1,filter.AC2) %>% 
+  group_by(libID) %>% 
+  mutate(filters= paste(filter, collapse = ", \n")) %>% 
+  select(experiment, libID, donorID, 
+         asthma,IL5,virus, filters) %>%
+  distinct() %>% 
+  arrange(experiment, donorID, asthma,IL5,virus) %>% 
+  
+  kable(align=c("c","c","c","c","l")) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)  
+```
+
+This results in the following samples for statistical analysis.
+
+```{r echo=FALSE}
+meta.filter2 %>% 
+  group_by(experiment, asthma,IL5,virus) %>% 
+  tally() %>% 
+  arrange(experiment, asthma,IL5,virus) %>% 
+  
+  kable(align="c") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE) %>% 
+  collapse_rows(1:2, valign="top") 
+```
+
+# Save clean data
+
+Normalized dat objects.
+
+```{r message=FALSE}
+#Save R object
+#Rename all pDC object
+dat.pDC.voom <- dat.pDC.filter2.abund.norm.voom
+
+#P259_1
+dat.pDC.voom_1 <- dat.pDC.voom
+
+dat.pDC.voom_1$targets <- dat.pDC.voom_1$targets %>% 
+  rownames_to_column() %>% 
+  filter(experiment == "P259_1") %>% 
+  droplevels() %>% 
+  column_to_rownames()
+
+dat.pDC.voom_1$E <- as.data.frame(dat.pDC.voom_1$E) %>% 
+  rownames_to_column() %>% 
+  select(rowname, dat.pDC.voom_1$targets$libID) %>% 
+  column_to_rownames()
+
+#P259_2
+dat.pDC.voom_2 <- dat.pDC.voom
+
+dat.pDC.voom_2$targets <- dat.pDC.voom_2$targets %>% 
+  rownames_to_column() %>% 
+  filter(experiment == "P259_2") %>% 
+  droplevels() %>% 
+  column_to_rownames()
+
+dat.pDC.voom_2$E <- as.data.frame(dat.pDC.voom_2$E) %>% 
+  rownames_to_column() %>% 
+  select(rowname, dat.pDC.voom_2$targets$libID) %>% 
+  column_to_rownames()
+
+save(dat.pDC.voom, dat.pDC.voom_1, dat.pDC.voom_2,
+     file="data_clean/P259_pDC_clean.RData")
+```
+
+# R session
+
+```{r}
+sessionInfo()
+```
+
+***

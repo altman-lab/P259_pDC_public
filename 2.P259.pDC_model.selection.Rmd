@@ -1,0 +1,879 @@
+---
+title: 'P259: Model selection'
+subtitle: "Dendritic cells (pDC)"
+author: "Kim Dill-McFarland, kadm@uw.edu"
+date: "version `r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+editor_options:
+  chunk_output_type: console
+---
+# Background
+
+The purpose of this workflow is to identify differentially expressed genes in pDC. Several models are compared in order to determine the best way to extract the effects of Anti-IL5 therapy and eosinophil (EOS) supernatant over the much larger human rhinovirus (RV) signal. 
+
+# Setup
+Load packages
+
+```{r message=FALSE, warning=FALSE}
+# Data manipulation and figures
+library(tidyverse)
+    # Multi-panel figures for ggplot
+    library(cowplot)
+    # Add p-values to plots
+    library(ggpubr)
+#Venn diagrams
+library(venn)
+#Linear models
+library(limma)
+#Define ggplot colors
+group.cols <- c("none:none"="#dadaeb",
+               "none:AntiIL5"="#9e9ac8",
+               "none:EOS.supp"="#54278f",
+               "HRV:none"="#c7e9c0",
+               "HRV:AntiIL5"="#74c476",
+               "HRV:EOS.supp"="#006d2c",
+               "flu:none"="#fdae6b",
+               "flu:AntiIL5"="#e6550d")
+samp.cols <- c("AC1"="#969696",
+               "AC2"="#a6cee3",
+               "AC3"="#1f78b4",
+               "AC4"="#b2df8a",
+               "AC5"="#33a02c",
+               "AT1"="#fb9a99",
+               "AT2"="#e31a1c",               
+               "AT3"="#fdbf6f",
+               "AT4"="#ff7f00",
+               "donor1"="#cab2d6",
+               "donor2"="#6a3d9a",
+               "donor3"="#ffff99",
+               "donor4"="#b15928")
+
+# Print tty table to knit file
+library(knitr)
+library(kableExtra)
+```
+
+Set seed
+
+```{r}
+set.seed(4389)
+```
+
+Scripts and functions
+
+```{r}
+#To extract and format p-value from lmFit
+source("https://raw.githubusercontent.com/kdillmcfarland/R_bioinformatic_scripts/master/limma.extract.pval.R")
+#opposite of %in%
+`%notin%` <- Negate(`%in%`)
+```
+
+# Load data
+
+Load normalized edgeR data objects. RNA-seq data was cleaned and normalized in [data cleaning](1.P259.pDC_data.cleaning.html). This included filtering for median CV coverage, mapped duplicate reads, total aligned counts, PCA outliers, and rare genes.
+
+```{r}
+load("data_clean/P259_pDC_clean.RData")
+```
+
+This includes in the following pDC samples.
+
+```{r echo=FALSE}
+dat.pDC.voom$targets %>% 
+  group_by(experiment, asthma,IL5,virus) %>% 
+  tally() %>% 
+  arrange(experiment, asthma,IL5,virus) %>% 
+  
+  kable(align="c") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE) %>% 
+  collapse_rows(1:2, valign="top") 
+```
+
+# Variables of interest
+
+**Main effects** 
+
+* `donorID`: `r class(dat.pDC.voom$targets$donorID)` for each donor (N = `r length(unique(dat.pDC.voom$targets$donorID))`)
+* `IL5`: `r class(dat.pDC.voom$targets$IL5)` of patient AntiIL5 therapy or sample EOS supernatant treatment (`r paste(levels(dat.pDC.voom$targets$IL5), collapse=", ")`)
+* `virus`: `r class(dat.pDC.voom$targets$virus)` of viral conditions (`r paste(levels(dat.pDC.voom$targets$virus), collapse=", ")`)
+
+**Fixed effects**
+
+* `Sex`: `r paste(unique(dat.pDC.voom$targets$Sex), collapse=", ")`
+* `Age`: age, years (`r min(dat.pDC.voom$targets$Age, na.rm=TRUE)` - `r max(dat.pDC.voom$targets$Age, na.rm=TRUE)`)
+    - Neither available for 2 of 4 donors in P259.1
+
+## Explore fixed effects and possible confounding variables
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=8.5}
+plot1 <- dat.pDC.voom$targets %>% 
+  select(experiment,donorID,IL5,Age) %>% 
+  distinct() %>% 
+  
+  ggplot(aes(x=IL5, y=Age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color=donorID), height=0,width=0.2, size=3) +
+  stat_compare_means(method="wilcox.test") +
+  facet_wrap(~experiment, scales = "free_x") +
+  theme_classic() +
+  scale_color_manual(values=samp.cols) +
+  labs(x="Treatment")
+  
+#Calculate chi-square for sex
+sex.p.1 <- dat.pDC.voom$targets %>% 
+  filter(experiment == "P259_1") %>% 
+  droplevels()
+sex.p.1 <- table(sex.p.1$IL5, sex.p.1$Sex) %>% 
+  chisq.test()
+
+sex.p.2 <- dat.pDC.voom$targets %>% 
+  filter(experiment == "P259_2") %>% 
+  droplevels()
+sex.p.2 <- table(sex.p.2$IL5, sex.p.2$Sex) %>% 
+  chisq.test()
+
+plot2 <- dat.pDC.voom$targets %>% 
+  group_by(experiment, IL5, Sex) %>% 
+  tally() %>% 
+  
+  ggplot(aes(x=IL5, y=n, fill=Sex)) +
+  geom_bar(position="fill", stat="identity") +
+  facet_wrap(~experiment, scales = "free_x") +
+  theme_classic() +
+  labs(y="Proportion", title=paste("Sex\nP259.1 Chi-squared = ", 
+                                   round(sex.p.1$p.value,3),
+                                   "\nP259.2 Chi-squared = ", 
+                                   round(sex.p.2$p.value,3),
+                                   sep="")) +
+  scale_fill_manual(values=c("#f1a340","#998ec3"), na.value="grey")+
+  labs(x="Treatment")
+
+plot_grid(plot1, plot2) 
+```
+
+Age and sex appear to be different between treatment groups but are technically not significantly different, likely as the result of the small sample size. Due to this, the small sample size, and missing data in P259.1, sex and age will not be used as co-variates.
+
+# PCA
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=5, fig.width=8.5}
+# Calculate PCA
+PCA <- as.data.frame(dat.pDC.voom$E) %>% 
+  t() %>% 
+  prcomp()
+
+PC1.label <- paste("PC1 (", summary(PCA)$importance[2,1]*100, "%)", sep="")
+PC2.label <-paste("PC2 (", summary(PCA)$importance[2,2]*100, "%)", sep="")
+
+# Extract PC values
+PCA.dat <- as.data.frame(PCA$x) %>% 
+  rownames_to_column("libID") %>%
+  # Select PCs
+  dplyr::select(libID, PC1:PC3) %>% 
+  # Merge with metadata
+  left_join(dat.pDC.voom$targets, by="libID")
+
+PCA1 <- ggplot(PCA.dat, aes(PC1, PC2, color=virus:IL5, shape=experiment)) +
+      geom_point(size=2, stroke=1.5)  +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nvoom normalized abundant logCPM") +
+      coord_fixed(ratio=1) +
+      scale_shape_manual(values=c(21,16)) +
+      guides(color=guide_legend(title.position="top", 
+                                title.hjust = 0.5))+
+      scale_color_manual(values = group.cols)
+
+PCA2 <- ggplot(PCA.dat, aes(PC1, PC2, color=donorID, shape=experiment)) +
+      geom_point(size=2, stroke=1.5) +
+      #Beautify
+      theme_classic() +
+      labs(x=PC1.label, y=PC2.label, 
+           title="pDC experiment\nvoom normalized abundant logCPM") +
+      coord_fixed(ratio=1) +
+      scale_shape_manual(values=c(21,16)) +
+      scale_color_manual(values=samp.cols)
+
+plot_grid(PCA1,PCA2, align = "hv", ncol=2)
+```
+
+# P259.1 model comparison
+## Run models
+### Interaction model
+
+`gene expression ~ EOS.supp * virus + (1|donor)`
+
+```{r}
+# Define model
+model_1.interact <- model.matrix(~ IL5*virus,
+                          data=dat.pDC.voom_1$targets)
+    colnames(model_1.interact) <- c("(Intercept)", "EOS.supp",
+                            "HRV", "EOS.supp:HRV")
+#Block by donor
+consensus.corr <- duplicateCorrelation(
+  dat.pDC.voom_1$E,
+  model_1.interact,
+  block=dat.pDC.voom_1$targets$donorID)$consensus.correlation
+
+consensus.corr
+
+# Fit model to transformed count data. Calculate eBayes
+efitQW_1.interact <- eBayes(
+                lmFit(dat.pDC.voom_1$E, 
+                      model_1.interact,
+                      block=dat.pDC.voom_1$targets$donorID,
+                      correlation=consensus.corr))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Extract p-values from results
+extract.pval(model=model_1.interact,
+             voom.dat=dat.pDC.voom_1$E, 
+             eFit=efitQW_1.interact, 
+             name="pval_1.interact",
+             summary=TRUE,
+             contrasts=FALSE)
+```
+
+Summary
+
+```{r echo=FALSE}
+pval_1.interact.summ  %>% 
+
+  kable(align=c("l","c","c","c","c","c","c"),
+        col.names = c("Variable", 
+                      "<0.05", "<0.1",
+                      "<0.2", "<0.3", "<0.4",
+                      "<0.5")) %>% 
+  kable_styling(latex_options="HOLD_position") %>% 
+  add_header_above(c(" ", "Total genes at FDR" = 6))
+```
+
+### Contrasts model
+
+`gene expression ~ EOS.supp:virus + (1|donor)`
+
+```{r}
+# Define model
+dat.pDC.voom_1$targets <- dat.pDC.voom_1$targets %>% 
+  mutate(contrast=paste(IL5, virus, sep="_")) %>% 
+  mutate(contrast=factor(contrast, 
+                         levels = c("none_none","none_HRV",
+                                 "EOS.supp_none","EOS.supp_HRV")))
+
+model_1.contrast<- model.matrix(~ 0 + contrast,
+                          data=dat.pDC.voom_1$targets)
+    colnames(model_1.contrast) <- c(
+                                 "none_none","none_HRV",
+                                 "EOS.supp_none","EOS.supp_HRV")
+#Block by donor  
+consensus.corr <- duplicateCorrelation(
+  dat.pDC.voom_1$E,
+  model_1.contrast,
+  block=dat.pDC.voom_1$targets$donorID)$consensus.correlation
+
+consensus.corr
+
+#Fit model
+fitQW_1.contrast <- lmFit(dat.pDC.voom_1$E, 
+                      model_1.contrast,
+                      block=dat.pDC.voom_1$targets$donorID,
+                      correlation=consensus.corr)
+#Get contrasts
+contrast.matrix <- makeContrasts(
+  none_HRV-none_none, 
+  EOS.supp_HRV-EOS.supp_none,
+  EOS.supp_none-none_none,
+  EOS.supp_HRV-none_HRV,
+  levels=model_1.contrast)
+
+efitQW_1.contrast <- eBayes(contrasts.fit(fitQW_1.contrast,
+                                  contrast.matrix))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Extract p-values from results
+extract.pval(model=model_1.contrast,
+             voom.dat=dat.pDC.voom_1$E, 
+             eFit=efitQW_1.contrast, 
+             name="pval_1.contrast",
+             summary=TRUE,
+             contrasts=TRUE,
+             contrast.mat=contrast.matrix)
+```
+
+Summary
+
+```{r echo=FALSE}
+pval_1.contrast.summ  %>% 
+
+  kable(align=c("l","c","c","c","c","c","c"),
+        col.names = c("Variable", 
+                      "<0.05", "<0.1",
+                      "<0.2", "<0.3", "<0.4",
+                      "<0.5")) %>% 
+  kable_styling(latex_options="HOLD_position") %>% 
+  add_header_above(c(" ", "Total genes at FDR" = 6))
+```
+
+#### Contrast selected genes
+
+Genes of interest are those that change with virus (*e.g.* significant for virus in untreated and/or treated samples) AND with EOS supernatant in media OR HRV.
+
+```{r echo=FALSE, fig.height=6, fig.width=8.5}
+#Define FDR cutoffs to assess
+fdr.list <- c(0.05,0.1,0.2,0.3,0.4,0.5)
+
+par(mfrow = c(2, 3))
+
+for(fdr in fdr.list){
+  #Blank list for results
+  venn.list <- list()
+  #Signif for virus
+  temp <- pval_1.contrast %>% 
+          filter(group %in% c("none_HRV - none_none",
+                              "EOS.supp_HRV - EOS.supp_none") & 
+                   adj.P.Val <= fdr) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["RV-infected\nvs media"]] <- temp
+  
+  #Signif in media
+  temp2 <- pval_1.contrast %>% 
+          filter(group %in% c("EOS.supp_none - none_none") & 
+                   adj.P.Val <= fdr) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  
+  venn.list[["- RV\nEOS supernatant\nvs none"]] <- temp2
+  
+  #Signif in HRV
+  temp3 <- pval_1.contrast %>% 
+          filter(group %in% c("EOS.supp_HRV - none_HRV") & 
+                   adj.P.Val <= fdr) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  
+  venn.list[["+ RV\nEOS supernatant\nvs none"]] <- temp3
+  
+  venn(ilab=FALSE, zcolor = "style",ilcs=1.5,sncs=1.5,
+     x=venn.list, box=FALSE)
+  
+  title(sub=paste("FDR < ", fdr, sep=""), line = -1, cex.sub=1.5)
+}
+```
+
+### Delta model
+
+`RV - media gene expression ~ EOS.supp + (1|donor)`
+
+Calculate HRV - media counts.
+
+```{r echo=FALSE, message=FALSE}
+dat.pDC.voom_1.delta.E <- as.data.frame(dat.pDC.voom_1$E) %>% 
+  #Longer format, libID to columns
+  rownames_to_column() %>% 
+  pivot_longer(-rowname, names_to="libID") %>% 
+  #Merge with metadata
+  left_join(select(dat.pDC.voom_1$targets, libID, 
+                   donorID, IL5, virus), by = "libID") %>% 
+  select(-libID) %>% 
+  #Separate media vs HRV samples
+  pivot_wider(names_from = virus) %>% 
+  #Calculate delta
+  group_by(rowname, donorID, IL5) %>% 
+  summarise(value = HRV-none) %>% 
+  drop_na(value) %>% 
+  ungroup() %>% 
+  #Rename with donor.EOS
+  mutate(new.name = paste(donorID, IL5, sep="_")) %>% 
+  select(-donorID, -IL5) %>% 
+  arrange(new.name, rowname) %>% 
+  pivot_wider(names_from = new.name) %>% 
+  #Matrix
+  column_to_rownames()
+```
+
+```{r echo=FALSE}
+#Subset metadata
+dat.pDC.voom_1.delta.tgts <- dat.pDC.voom_1$targets %>% 
+  select(-lib.size, -norm.factors, -libID, -sample.weights) %>% 
+  filter(virus=="HRV") %>% 
+  mutate(new.name = paste(donorID, IL5, sep="_")) %>% 
+  filter(new.name %in% colnames(dat.pDC.voom_1.delta.E)) %>% 
+  arrange(new.name)
+```
+
+Fit model
+
+```{r}
+# Define model
+model_1.delta <- model.matrix(~ IL5,
+                          data=dat.pDC.voom_1.delta.tgts)
+    colnames(model_1.delta) <- c("(Intercept)","EOS.supp")
+
+#Block by donor
+consensus.corr <- duplicateCorrelation(
+  dat.pDC.voom_1.delta.E,
+  model_1.delta,
+  block=dat.pDC.voom_1.delta.tgts$donorID)$consensus.correlation
+
+consensus.corr
+
+# Fit model to transformed count data. Calculate eBayes
+efitQW_1.delta <- eBayes(
+                lmFit(dat.pDC.voom_1.delta.E, 
+                      model_1.delta,
+                      block=dat.pDC.voom_1.delta.tgts$donorID,
+                      correlation=consensus.corr))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Extract p-values from results
+extract.pval(model=model_1.delta,
+             voom.dat=dat.pDC.voom_1.delta.E, 
+             eFit=efitQW_1.delta, 
+             name="pval_1.delta",
+             summary=TRUE,
+             contrasts=FALSE)
+```
+
+Summary
+
+```{r echo=FALSE}
+pval_1.delta.summ %>% 
+
+  kable(align=c("l","c","c","c","c","c","c"),
+        col.names = c("Variable", 
+                      "<0.05", "<0.1",
+                      "<0.2", "<0.3", "<0.4",
+                      "<0.5")) %>% 
+  kable_styling(latex_options="HOLD_position") %>% 
+  add_header_above(c(" ", "Total genes at FDR" = 6))
+```
+
+## Compare models
+
+```{r echo=FALSE}
+fdr.cutoff <- 0.2
+```
+
+Total genes significant in one or more models at FDR < `r fdr.cutoff`
+
+```{r echo=FALSE}
+venn.list <- list()
+
+#Signif for interaction
+  temp <- pval_1.interact %>% 
+          filter(group %in% c("EOS.supp:HRV") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["Signif interaction"]] <- temp
+  
+#Signif for delta
+  temp <- pval_1.delta %>% 
+          filter(group %in% c("EOS.supp") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["Signif delta"]] <- temp  
+  
+#Signif for contrasts
+  ##Signif for virus
+  temp1 <- pval_1.contrast %>% 
+          filter(group %in% c("none_HRV - none_none", 
+                              "EOS.supp_HRV - EOS.supp_none") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  ##Signif for treatment
+  temp2 <- pval_1.contrast %>% 
+          filter(group %in% c("EOS.supp_none - none_none", 
+                              "EOS.supp_HRV - none_HRV") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  temp <- pval_1.contrast %>% 
+          filter(geneName %in% temp1 & geneName %in% temp2) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["Signif contrast"]] <- temp  
+ 
+par(mfrow = c(1,1)) 
+  venn(ilab=FALSE, zcolor = "style",ilcs=1,sncs=1.5,
+     x=venn.list)
+  
+  title(sub="FDR < 0.2", line = -1, cex.sub=1.5)
+```
+
+## Save results
+
+```{r}
+dir.create("results/gene_level/P259.1_model.selection/", 
+           showWarnings = FALSE, recursive = TRUE)
+
+save(pval_1.interact, pval_1.contrast, pval_1.delta,
+     file="results/gene_level/P259.1_model.selection/P259.1_gene_pval.RData")
+
+#gene lists
+save(venn.list, file="results/gene_level/P259.1_model.selection/P259.1_gene_lists.RData")
+
+#pval csv
+pval_1.interact %>% 
+  mutate(model = "interaction") %>% 
+  bind_rows(mutate(pval_1.contrast, 
+                   model="contrasts")) %>% 
+  bind_rows(mutate(pval_1.delta, 
+                   model="delta")) %>% 
+  #Add HGNC symbol
+  left_join(dat.pDC.voom_1$genes) %>% 
+  write_csv(path = "results/gene_level/P259.1_gene_pval.csv")
+```
+
+# P259.2 model comparison
+## Run models
+### Interaction model
+
+`gene expression ~ AntiIL5 * virus + (1|donor)`
+
+```{r}
+# Define model
+model_2.interact <- model.matrix(~ IL5*virus,
+                          data=dat.pDC.voom_2$targets)
+    colnames(model_2.interact) <- c("(Intercept)", "AntiIL5",
+                            "HRV", "AntiIL5:HRV")
+#Block by donor
+consensus.corr <- duplicateCorrelation(
+  dat.pDC.voom_2$E,
+  model_2.interact,
+  block=dat.pDC.voom_2$targets$donorID)$consensus.correlation
+
+consensus.corr
+
+# Fit model to transformed count data. Calculate eBayes
+efitQW_2.interact <- eBayes(
+                lmFit(dat.pDC.voom_2$E, 
+                      model_2.interact,
+                      block=dat.pDC.voom_2$targets$donorID,
+                      correlation=consensus.corr))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Extract p-values from results
+extract.pval(model=model_2.interact,
+             voom.dat=dat.pDC.voom_2$E, 
+             eFit=efitQW_2.interact, 
+             name="pval_2.interact",
+             summary=TRUE,
+             contrasts=FALSE)
+```
+
+Summary
+
+```{r echo=FALSE}
+pval_2.interact.summ  %>% 
+
+  kable(align=c("l","c","c","c","c","c","c"),
+        col.names = c("Variable", 
+                      "<0.05", "<0.1",
+                      "<0.2", "<0.3", "<0.4",
+                      "<0.5")) %>% 
+  kable_styling(latex_options="HOLD_position") %>% 
+  add_header_above(c(" ", "Total genes at FDR" = 6))
+```
+
+### Contrasts model
+
+`gene expression ~ AntiIL5:virus + (1|donor)`
+
+```{r}
+# Define model
+dat.pDC.voom_2$targets <- dat.pDC.voom_2$targets %>% 
+  mutate(contrast=paste(IL5,virus, sep="_")) %>% 
+  mutate(contrast=factor(contrast, 
+                         levels = c("none_none","none_HRV",
+                                 "AntiIL5_none","AntiIL5_HRV")))
+
+model_2.contrast<- model.matrix(~ 0 + contrast,
+                          data=dat.pDC.voom_2$targets)
+    colnames(model_2.contrast) <- c(
+                                 "none_none","none_HRV",
+                                 "AntiIL5_none","AntiIL5_HRV")
+#Block by donor  
+consensus.corr <- duplicateCorrelation(
+  dat.pDC.voom_2$E,
+  model_2.contrast,
+  block=dat.pDC.voom_2$targets$donorID)$consensus.correlation
+
+consensus.corr
+
+#Fit model
+fitQW_2.contrast <- lmFit(dat.pDC.voom_2$E, 
+                      model_2.contrast,
+                      block=dat.pDC.voom_2$targets$donorID,
+                      correlation=consensus.corr)
+
+#Get contrasts
+contrast.matrix <- makeContrasts(
+  none_HRV-none_none, 
+  AntiIL5_HRV-AntiIL5_none,
+  AntiIL5_none-none_none,
+  AntiIL5_HRV-none_HRV,
+  levels=model_2.contrast)
+
+efitQW_2.contrast <- eBayes(contrasts.fit(fitQW_2.contrast,
+                                  contrast.matrix))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Extract p-values from results
+extract.pval(model=model_2.contrast,
+             voom.dat=dat.pDC.voom_2$E, 
+             eFit=efitQW_2.contrast, 
+             name="pval_2.contrast",
+             summary=TRUE,
+             contrasts=TRUE,
+             contrast.mat=contrast.matrix)
+```
+
+Summary
+
+```{r echo=FALSE}
+pval_2.contrast.summ  %>% 
+
+  kable(align=c("l","c","c","c","c","c","c"),
+        col.names = c("Variable", 
+                      "<0.05", "<0.1",
+                      "<0.2", "<0.3", "<0.4",
+                      "<0.5")) %>% 
+  kable_styling(latex_options="HOLD_position") %>% 
+  add_header_above(c(" ", "Total genes at FDR" = 6))
+```
+
+### Contrast selected genes
+
+Genes of interest are those that change with virus (*e.g.* significant for virus in untreated and/or treated donors) AND are different between untreated and treated donors in media OR RV.
+
+```{r echo=FALSE, fig.height=6, fig.width=8.5}
+#Define FDR cutoffs to assess
+fdr.list<- c(0.05,0.1,0.2,0.3,0.4,0.5)
+
+par(mfrow = c(2, 3))
+
+for(fdr in fdr.list){
+  #Blank list for results
+  venn.list <- list()
+  #Signif for virus
+  temp <- pval_2.contrast %>% 
+          filter(group %in% c("none_HRV - none_none",
+                              "AntiIL5_HRV - AntiIL5_none") & 
+                   adj.P.Val <= fdr) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["RV-infected\nvs media"]] <- temp
+  
+  #Signif in media
+  temp2 <- pval_2.contrast %>% 
+          filter(group %in% c("AntiIL5_none - none_none") & 
+                   adj.P.Val <= fdr) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  
+  venn.list[["- RV\nAntiIL5 therapy\nvs none"]] <- temp2
+  
+  #Signif in HRV
+  temp3 <- pval_2.contrast %>% 
+          filter(group %in% c("AntiIL5_HRV - none_HRV") & 
+                   adj.P.Val <= fdr) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  
+  venn.list[["+ RV\nAntiIL5 therapy\nvs none"]] <- temp3
+  
+  venn(ilab=FALSE, zcolor = "style",ilcs=1.5,sncs=1.5,
+     x=venn.list, box=FALSE)
+  
+  title(sub=paste("FDR < ", fdr, sep=""), line = -1, cex.sub=1.5)
+}
+```
+
+### Delta model
+
+`RV - media gene expression ~ AntiIL5`
+
+Calculate HRV - media counts.
+
+```{r echo=FALSE, message=FALSE}
+dat.pDC.voom_2.delta.E <- as.data.frame(dat.pDC.voom_2$E) %>% 
+  #Longer format, libID to columns
+  rownames_to_column() %>% 
+  pivot_longer(-rowname, names_to="libID") %>% 
+  #Merge with metadata
+  left_join(select(dat.pDC.voom_2$targets, libID, 
+                   donorID, virus.detail), by = "libID") %>% 
+  select(-libID) %>% 
+  #Separate media vs HRV samples
+  pivot_wider(names_from = virus.detail) %>% 
+  #Calculate delta
+  group_by(rowname, donorID) %>% 
+  summarise(oldHRV = oldHRV-none,
+            newHRV = newHRV-none) %>% 
+  #Rename with donor.HRV
+  pivot_longer(-c(rowname, donorID)) %>% 
+  mutate(new.name = paste(donorID, name, sep=".")) %>% 
+  #Wide format
+  select(rowname, new.name, value) %>% 
+  arrange(new.name, rowname) %>% 
+  pivot_wider(names_from = new.name) %>% 
+  #Matrix
+  column_to_rownames()
+```
+
+```{r echo=FALSE}
+#Subset metadata
+dat.pDC.voom_2.delta.tgts <- dat.pDC.voom_2$targets %>% 
+  select(-lib.size, -norm.factors, -libID, -sample.weights) %>% 
+  mutate(new.name = paste(donorID, virus.detail, sep=".")) %>% 
+  filter(new.name %in% colnames(dat.pDC.voom_2.delta.E)) %>% 
+  arrange(new.name)
+```
+
+Fit model
+
+```{r}
+# Define model
+model_2.delta <- model.matrix(~ IL5,
+                          data=dat.pDC.voom_2.delta.tgts)
+    colnames(model_2.delta) <- c("(Intercept)","AntiIL5")
+    
+#Block by donor
+consensus.corr <- duplicateCorrelation(
+  dat.pDC.voom_2.delta.E,
+  model_2.delta,
+  block=dat.pDC.voom_2.delta.tgts$donorID)$consensus.correlation
+
+consensus.corr
+
+# Fit model to transformed count data. Calculate eBayes
+efitQW_2.delta <- eBayes(
+                lmFit(dat.pDC.voom_2.delta.E, 
+                      model_2.delta,
+                      block=dat.pDC.voom_2.delta.tgts$donorID,
+                      correlation=consensus.corr))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Extract p-values from results
+extract.pval(model=model_2.delta,
+             voom.dat=dat.pDC.voom_2.delta.E, 
+             eFit=efitQW_2.delta, 
+             name="pval_2.delta",
+             summary=TRUE,
+             contrasts=FALSE)
+```
+
+Summary
+
+```{r echo=FALSE}
+pval_2.delta.summ %>% 
+
+  kable(align=c("l","c","c","c","c","c","c"),
+        col.names = c("Variable", 
+                      "<0.05", "<0.1",
+                      "<0.2", "<0.3", "<0.4",
+                      "<0.5")) %>% 
+  kable_styling(latex_options="HOLD_position") %>% 
+  add_header_above(c(" ", "Total genes at FDR" = 6))
+```
+
+## Compare models
+
+Total genes significant in one or more models at FDR < `r fdr.cutoff`
+
+```{r echo=FALSE}
+venn.list <- list()
+
+#Signif for interaction
+  temp <- pval_2.interact %>% 
+          filter(group %in% c("AntiIL5:HRV") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["Signif interaction"]] <- temp
+  
+#Signif for delta
+  temp <- pval_2.delta %>% 
+          filter(group %in% c("AntiIL5") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["Signif delta"]] <- temp  
+  
+#Signif for contrasts
+  ##Signif for virus
+  temp1 <- pval_2.contrast %>% 
+          filter(group %in% c("none_HRV - none_none", 
+                              "AntiIL5_HRV - AntiIL5_none") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  ##Signif for treatment
+  temp2 <- pval_2.contrast %>% 
+          filter(group %in% c("AntiIL5_none - none_none", 
+                              "AntiIL5_HRV - none_HRV") & 
+                   adj.P.Val <= fdr.cutoff) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  temp <- pval_2.contrast %>% 
+          filter(geneName %in% temp1 & geneName %in% temp2) %>% 
+          distinct(geneName) %>% 
+          select(geneName) %>% unlist(use.names = FALSE)
+  venn.list[["Signif contrast"]] <- temp  
+ 
+par(mfrow = c(1,1)) 
+  venn(ilab=FALSE, zcolor = "style",ilcs=1,sncs=1.5,
+     x=venn.list)
+  
+  title(sub="FDR < 0.5", line = -1, cex.sub=1.5)
+```
+
+## Save results
+
+```{r}
+dir.create("results/gene_level/P259.2_model.selection/", 
+           showWarnings = FALSE, recursive = TRUE)
+
+save(pval_2.interact, pval_2.contrast, pval_2.delta,
+     file="results/gene_level/P259.2_model.selection/P259.2_gene_pval.RData")
+
+#gene lists
+save(venn.list, file="results/gene_level/P259.2_model.selection/P259.2_gene_lists.RData")
+
+#pval csv
+pval_2.interact %>% 
+  mutate(model = "interaction") %>% 
+  bind_rows(mutate(pval_2.contrast, 
+                   model="contrasts")) %>% 
+  bind_rows(mutate(pval_2.delta, 
+                   model="delta")) %>% 
+  #Add HGNC symbol
+  left_join(dat.pDC.voom_2$genes) %>% 
+  write_csv(path = "results/gene_level/P259.2_gene_pval.csv")
+```
+
+# R session
+
+```{r}
+sessionInfo()
+```
+
+***

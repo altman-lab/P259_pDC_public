@@ -1,0 +1,162 @@
+---
+title: 'P259: Gene set enrichment analysis (GSEA)'
+subtitle: "Dendritic cells (pDC)"
+author: "Kim Dill-McFarland, kadm@uw.edu"
+date: "version `r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+editor_options:
+  chunk_output_type: console
+---
+# Background
+
+The purpose of this workflow is to perform GSEA for the impacts of human rhinovirus (RV) infection, eosinophil (EOS) supernatant, and Anti-IL5 therapy.
+
+# Setup
+Load packages
+
+```{r message=FALSE, warning=FALSE}
+# Data manipulation and figures
+library(tidyverse)
+# Multipanel figures
+library(cowplot)
+
+#GSEA
+library(fgsea)
+library(gage)
+
+#Print pretty tables to Rmd
+library(knitr)
+library(kableExtra)
+```
+
+Set seed
+
+```{r}
+set.seed(589)
+```
+
+# Load data
+## RNA-seq
+
+Contrast model results.
+
+```{r results.data, message=FALSE}
+pval_2 <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>% 
+  filter(model=="contrasts")
+pval_1 <- read_csv("results/gene_level/P259.1_gene_pval.csv") %>% 
+  filter(model=="contrasts")
+```
+
+Extract and format fold change (FC) for each contrast.
+
+```{r}
+gene.ls <- list()
+
+for (contrast in unique(pval_2$group)){
+  #Subset to contrast of interest
+  pval.temp <- pval_2 %>% filter(group == contrast)
+  
+  genes.temp <- pval.temp$logFC
+  names(genes.temp) <- pval.temp$hgnc_symbol
+  
+  list.name <- paste(gsub(" - ", ".", contrast), 2, sep=".")
+  gene.ls[[list.name]] <- genes.temp
+}
+
+for (contrast in unique(pval_1$group)){
+  #Subset to contrast of interest
+  pval.temp <- pval_1 %>% filter(group == contrast)
+  
+  genes.temp <- pval.temp$logFC
+  names(genes.temp) <- pval.temp$hgnc_symbol
+  
+  list.name <- paste(gsub(" - ", ".", contrast), 1, sep=".")
+  gene.ls[[list.name]] <- genes.temp
+}
+```
+
+## Broad gene sets
+
+From <https://www.gsea-msigdb.org/gsea/msigdb/collections.jsp>. Downloaded in `data_clean/Broad_gmt/`
+
+# Gene set enrichment analysis (GSEA)
+
+The following function performs GSEA using both fast gene set enrichment analysis (`fgsea`) and generally applicable gene-set enrichment (`gage`). 
+
+```{r}
+source("https://raw.githubusercontent.com/kdillmcfarland/R_bioinformatic_scripts/master/GSEA_fxn.R")
+```
+
+## Run GSEA
+#### Hallmark (H)
+
+```{r h, warnings=FALSE, message=FALSE, eval=FALSE}
+GSEA(gene_list = gene.ls, 
+     gmt_file="data_clean/Broad_gmt/h.all.v7.1.symbols.gmt")
+```
+
+#### Curated gene sets (C2)
+
+```{r c2, warnings=FALSE, message=FALSE, eval=FALSE}
+GSEA(gene_list = gene.ls, 
+     gmt_file="data_clean/Broad_gmt/c2.all.v7.1.symbols.gmt")
+```
+
+#### GO gene sets (C5)
+
+```{r c5, warnings=FALSE, message=FALSE, eval=FALSE}
+GSEA(gene_list = gene.ls, 
+     gmt_file="data_clean/Broad_gmt/c5.all.v7.1.symbols.gmt")
+```
+
+## Significant GSEA
+
+```{r echo=FALSE, message=FALSE}
+#Load results for faster knitting
+h_GSEA.result <- read_csv("results/GSEA_FoldChange/h_GSEA.result.csv")
+c2_GSEA.result <- read_csv("results/GSEA_FoldChange/c2_GSEA.result.csv")
+c5_GSEA.result <- read_csv("results/GSEA_FoldChange/c5_GSEA.result.csv")
+```
+
+Gene sets of interest are those significant for both virus AND EOS supernatant or Anti-IL5 therapy. Results are only considered significant if both fgsea and gage methods meet the FDR threshold in the same fold change direction.
+
+```{r echo=FALSE}
+source("scripts/GSEA.score.plot.R")
+```
+
+#### Hallmark FDR < 0.1
+
+```{r echo=FALSE, fig.height=5, fig.width=8.5}
+gsea.plot(gsea = h_GSEA.result, fdr.cut = 0.1, 
+          prefix = "H", print.plot = TRUE, save.plot = FALSE)
+```
+
+#### Curated gene sets (C2) FDR < 0.05
+
+```{r echo=FALSE, fig.height=25, fig.width=8.5}
+gsea.plot(gsea = c2_GSEA.result, fdr.cut = 0.05, 
+          prefix = "C2", print.plot = TRUE, save.plot = FALSE)
+```
+
+#### GO gene sets (C5) FDR < 0.05
+
+```{r echo=FALSE, fig.height=25, fig.width=8.5}
+gsea.plot(gsea = c5_GSEA.result, fdr.cut = 0.05, 
+          prefix = "C5", print.plot = TRUE, save.plot = FALSE)
+```
+
+# R session
+
+```{r}
+sessionInfo()
+```
+
+***

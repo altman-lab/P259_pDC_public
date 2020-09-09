@@ -1,0 +1,43 @@
+experiment,libID,donorID,sampleSource,cellType,asthma,IL5,virus,virus.detail,IFNa,IFNa_level,Age,Sex,median_cv_coverage,mapped_reads_w_dups,total_sequences,AntiIL5,inhaler,addtl_med
+P259_1,lib28523,donor1,BC,pDC,healthy,EOS.supp,none,none,none,NA,NA,NA,0.406577,0.911910169,4706938,NA,NA,NA
+P259_1,lib28524,donor1,BC,pDC,healthy,EOS.supp,HRV,oldHRV,none,841,NA,NA,0.425328,0.911902709,3757661,NA,NA,NA
+P259_1,lib28521,donor1,BC,pDC,healthy,none,none,none,none,30,NA,NA,0.513732,0.870029794,3678097,NA,NA,NA
+P259_1,lib28522,donor1,BC,pDC,healthy,none,HRV,oldHRV,none,1862,NA,NA,0.435162,0.889958977,3971520,NA,NA,NA
+P259_1,lib28530,donor2,BL,pDC,healthy,EOS.supp,none,none,none,NA,24,Male,0.354142,0.953297822,7227774,NA,NA,NA
+P259_1,lib28531,donor2,BL,pDC,healthy,EOS.supp,HRV,oldHRV,none,1625,24,Male,0.361214,0.945941531,7389470,NA,NA,NA
+P259_1,lib28528,donor2,BL,pDC,healthy,none,none,none,none,30,24,Male,0.374282,0.933273597,7312259,NA,NA,NA
+P259_1,lib28529,donor2,BL,pDC,healthy,none,HRV,oldHRV,none,5632,24,Male,0.388258,0.929481647,6929998,NA,NA,NA
+P259_1,lib28537,donor3,BC,pDC,healthy,EOS.supp,none,none,none,28,NA,NA,0.36788,0.944894034,7270999,NA,NA,NA
+P259_1,lib28538,donor3,BC,pDC,healthy,EOS.supp,HRV,oldHRV,none,811,NA,NA,0.345759,0.957710116,7787372,NA,NA,NA
+P259_1,lib28535,donor3,BC,pDC,healthy,none,none,none,none,28,NA,NA,0.352587,0.958137011,6948804,NA,NA,NA
+P259_1,lib28536,donor3,BC,pDC,healthy,none,HRV,oldHRV,none,3210,NA,NA,0.349234,0.955092798,7191778,NA,NA,NA
+P259_1,lib28545,donor4,BL,pDC,healthy,EOS.supp,HRV,oldHRV,none,28,32,Female,0.351589,0.957856063,7721777,NA,NA,NA
+P259_1,lib28543,donor4,BL,pDC,healthy,none,none,none,none,28,32,Female,0.424833,0.886221737,2767547,NA,NA,NA
+P259_1,lib28544,donor4,BL,pDC,healthy,none,HRV,oldHRV,none,134,32,Female,0.387062,0.935461302,4337888,NA,NA,NA
+P259_2,lib43983,AC1,BL,pDC,asthma,none,HRV,newHRV,none,NA,11,Male,0.85921,0.821943431,112154,none,Breo,singulair
+P259_2,lib43981,AC1,BL,pDC,asthma,none,none,none,none,NA,11,Male,0.86501,0.858165459,62823,none,Breo,singulair
+P259_2,lib43982,AC1,BL,pDC,asthma,none,HRV,oldHRV,none,NA,11,Male,0.869398,0.864978903,113480,none,Breo,singulair
+P259_2,lib43988,AC2,BL,pDC,asthma,none,HRV,newHRV,none,NA,20,Female,0.851868,0.865923487,69503,none,Advair,none
+P259_2,lib43986,AC2,BL,pDC,asthma,none,none,none,none,NA,20,Female,0.693137,0.89115488,347291,none,Advair,none
+P259_2,lib43987,AC2,BL,pDC,asthma,none,HRV,oldHRV,none,NA,20,Female,0.837354,0.745407193,157832,none,Advair,none
+P259_2,lib44549,AC3,BL,pDC,asthma,none,HRV,newHRV,none,NA,11,Female,0.334413,0.959219045,7592377,none,Dulera,singulair
+P259_2,lib44547,AC3,BL,pDC,asthma,none,none,none,none,NA,11,Female,0.339268,0.958388832,7304818,none,Dulera,singulair
+P259_2,lib44548,AC3,BL,pDC,asthma,none,HRV,oldHRV,none,NA,11,Female,0.350374,0.943414981,6561689,none,Dulera,singulair
+P259_2,lib44554,AC4,BL,pDC,asthma,none,HRV,newHRV,none,NA,11,Male,0.365792,0.950159702,4267951,none,Advair,sigulair
+P259_2,lib44552,AC4,BL,pDC,asthma,none,none,none,none,NA,11,Male,0.342454,0.950174256,6069058,none,Advair,sigulair
+P259_2,lib44553,AC4,BL,pDC,asthma,none,HRV,oldHRV,none,NA,11,Male,0.329856,0.949803129,6717172,none,Advair,sigulair
+P259_2,lib44559,AC5,BL,pDC,asthma,none,HRV,newHRV,none,NA,12,Female,0.399432,0.941407424,2171434,none,Advair,tiotropium (Spiriva); ipratropim (Atrovent); singulair
+P259_2,lib44557,AC5,BL,pDC,asthma,none,none,none,none,NA,12,Female,0.345182,0.957366844,5641284,none,Advair,tiotropium (Spiriva); ipratropim (Atrovent); singulair
+P259_2,lib44558,AC5,BL,pDC,asthma,none,HRV,oldHRV,none,NA,12,Female,0.355829,0.952398439,4520850,none,Advair,tiotropium (Spiriva); ipratropim (Atrovent); singulair
+P259_2,lib44005,AT1,BL,pDC,asthma,AntiIL5,HRV,newHRV,none,NA,15,Female,0.364433,0.949260387,4050603,Nucala,Breo,tiotropium (Spiriva)
+P259_2,lib44003,AT1,BL,pDC,asthma,AntiIL5,none,none,none,NA,15,Female,0.386745,0.93902,3129890,Nucala,Breo,tiotropium (Spiriva)
+P259_2,lib44004,AT1,BL,pDC,asthma,AntiIL5,HRV,oldHRV,none,NA,15,Female,0.337334,0.956647104,7272373,Nucala,Breo,tiotropium (Spiriva)
+P259_2,lib44010,AT2,BL,pDC,asthma,AntiIL5,HRV,newHRV,none,NA,13,Male,0.332077,0.945884857,7311071,Nucala,Dulera,singulair; triamcinolone (Nasacort)
+P259_2,lib44008,AT2,BL,pDC,asthma,AntiIL5,none,none,none,NA,13,Male,0.374815,0.948330201,3586910,Nucala,Dulera,singulair; triamcinolone (Nasacort)
+P259_2,lib44009,AT2,BL,pDC,asthma,AntiIL5,HRV,oldHRV,none,NA,13,Male,0.341074,0.955396533,6477586,Nucala,Dulera,singulair; triamcinolone (Nasacort)
+P259_2,lib44582,AT3,BL,pDC,asthma,AntiIL5,HRV,newHRV,none,NA,12,Male,0.325523,0.956560074,10702664,Nucala,Dulera,singulair
+P259_2,lib44580,AT3,BL,pDC,asthma,AntiIL5,none,none,none,NA,12,Male,0.343244,0.953517737,8041821,Nucala,Dulera,singulair
+P259_2,lib44581,AT3,BL,pDC,asthma,AntiIL5,HRV,oldHRV,none,NA,12,Male,0.33275,0.955635689,8223914,Nucala,Dulera,singulair
+P259_2,lib44587,AT4,BL,pDC,asthma,AntiIL5,HRV,newHRV,none,NA,16,Male,0.353664,0.952049239,5284611,Fasenra,Dulera,tiotropium (Spiriva); ipratropim-albuterol (DUONEB)
+P259_2,lib44585,AT4,BL,pDC,asthma,AntiIL5,none,none,none,NA,16,Male,0.838316,0.910325198,188722,Fasenra,Dulera,tiotropium (Spiriva); ipratropim-albuterol (DUONEB)
+P259_2,lib44586,AT4,BL,pDC,asthma,AntiIL5,HRV,oldHRV,none,NA,16,Male,0.331784,0.96173596,9444865,Fasenra,Dulera,tiotropium (Spiriva); ipratropim-albuterol (DUONEB)
