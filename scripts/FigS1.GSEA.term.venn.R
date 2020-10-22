@@ -17,7 +17,8 @@ venn.ls <- list()
 
 for(term in c("HALLMARK_INTERFERON_ALPHA_RESPONSE",
               "HALLMARK_INTERFERON_GAMMA_RESPONSE",
-              "HALLMARK_INFLAMMATORY_RESPONSE")){
+              "HALLMARK_INFLAMMATORY_RESPONSE",
+              "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION")){
   
   #Subset to term of interest
   myGO.temp <- myGO %>% 
@@ -33,7 +34,8 @@ for(term in c("HALLMARK_INTERFERON_ALPHA_RESPONSE",
 
 # Plot venn and save
 pdf("publication/fig/FigS1.GSEA.term.venn.pdf",
-    width=6, height=5.5)
-venn(ilab=FALSE, ilcs=1, sncs=1.5, box = FALSE,
+    width=5.5, height=5)
+venn(ilab=FALSE, ilcs=1, sncs=1, box = FALSE,
      x=venn.ls)
 dev.off()
+

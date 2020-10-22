@@ -194,10 +194,10 @@ h.combo.plot.lab <- h.combo.plot %>%
 FC.plot.dat <- h.combo.plot.lab %>% 
   mutate(group = paste(experiment, group, sep="_")) %>% 
   mutate(group1 = recode_factor(factor(group),
-                                "P259.2_virus.treat"="+ Anti-IL-5",
-                                "P259.2_virus.untreat"="- Anti-IL-5",
-                                "P259.1_virus.treat"="+ EOS sup-",
-                                "P259.1_virus.untreat"="- EOS sup",
+                                "P259.2_virus.treat"='"+ Anti-IL-5/5R"*alpha',
+                                "P259.2_virus.untreat"='"- Anti-IL-5/5R"*alpha',
+                                "P259.1_virus.treat"='"+ EOS sup-"',
+                                "P259.1_virus.untreat"='"- EOS sup"',
                                 
                                 "P259.1_treat.virus"="+ RV",
                                 "P259.2_treat.virus"="+ RV",
@@ -210,9 +210,9 @@ FC.plot.dat <- h.combo.plot.lab %>%
             "P259.1_virus.untreat"='italic("Ex vivo")~"RV-infected vs media"',
                                 
             "P259.1_treat.virus"='italic("Ex vivo")~"EOS supernatant vs none"',
-            "P259.2_treat.virus"='italic("In vivo")~"Anti-IL-5 vs none"',
+            "P259.2_treat.virus"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"',
             "P259.1_treat.media"='italic("Ex vivo")~"EOS supernatant vs none"',
-            "P259.2_treat.media"='italic("In vivo")~"Anti-IL-5 vs none"')) %>% 
+            "P259.2_treat.media"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"')) %>% 
   #Reorder terms
   mutate(term.ord = recode_factor(factor(term), 
             "INTERFERON ALPHA RESPONSE"="INTERFERON\nALPHA\nRESPONSE",
@@ -256,7 +256,8 @@ plot.v <- dat.v %>%
   theme(legend.position = "none",
         panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank(),
-        strip.background =element_rect(fill="white"))
+        strip.background =element_rect(fill="white")) +
+  scale_x_discrete(labels = ggplot2:::parse_safe)
 #plot.v
 
 #### Plot B/C: EOS supernatant or Anti-IL5 therapy ####

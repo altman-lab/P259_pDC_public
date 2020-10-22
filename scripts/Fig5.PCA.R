@@ -56,7 +56,8 @@ PCA.dat <- as.data.frame(PCA1$x) %>%
   mutate(facet.lab = experiment,
          facet.lab = recode(facet.lab,
                             "P259_1" = 'italic("Ex vivo")~"EOS supernatant"',
-                            "P259_2" = 'italic("In vivo")~"Anti-IL-5"'))
+                            "P259_2" = 'italic("In vivo")~"Anti-IL-5/5R"*alpha'))
+
 #### Plots ####
 PCA1 <- PCA.dat %>% 
   filter(experiment=="P259_1") %>% 

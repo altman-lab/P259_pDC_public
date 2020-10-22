@@ -40,18 +40,18 @@ dat.GOI.anno <- getBM(attributes = c('hgnc_symbol', 'ensembl_gene_id'),
   mutate(x.lab=paste(experiment, virus.detail,IL5, sep="_"),
          x.lab=gsub("oldH|newH", "", x.lab),
          x.lab=recode_factor(factor(x.lab),
-                             "P259_1_none_none"="RV  -\nEOS sup  -",
-                             "P259_2_none_none"="RV  -\nAnti-IL-5  -",
-                             "P259_1_none_EOS.supp"="-\n+",
-                             "P259_2_none_AntiIL5"="-\n+",
-                             "P259_1_RV_none"="+\n-",
-                             "P259_2_RV_none"="+\n-",
-                             "P259_1_RV_EOS.supp"="+\n+",
-                             "P259_2_RV_AntiIL5"="+\n+")) %>% 
+                             "P259_1_none_none"='"RV            -\nEOS sup  -"',
+                             "P259_2_none_none"='"-\n-"',
+                             "P259_1_none_EOS.supp"='"-\n+"',
+                             "P259_2_none_AntiIL5"='"-\n+"',
+                             "P259_1_RV_none"='"+\n-"',
+                             "P259_2_RV_none"='"+\n-"',
+                             "P259_1_RV_EOS.supp"='"+\n+"',
+                             "P259_2_RV_AntiIL5"='"+  RV\n+  Anti-IL-5/5R"*alpha')) %>% 
   mutate(facet.lab = experiment,
          facet.lab = recode(facet.lab,
-                            "P259_1" = 'italic("Ex vivo")~"\nEOS sup"',
-                            "P259_2" = 'italic("In vivo")~"\nAnti-IL-5"')) %>% 
+                            "P259_1" = 'atop(italic("Ex vivo"),"EOS sup")',
+                            "P259_2" = 'atop(italic("In vivo"),"Anti-IL-5/5R"*alpha)')) %>% 
   arrange(facet.lab) 
 
 #### Format pval data ####
@@ -80,26 +80,26 @@ GOI.p <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>%
   #Match group labels to those in plots
   mutate(group.long = paste(dataset, group, sep="_"),
          group1 = recode_factor(factor(group.long),
-                                "P259.2_none_HRV - none_none"="RV  -\nAnti-IL-5  -",
-                                "P259.2_AntiIL5_HRV - AntiIL5_none"="-\n+",
-                                "P259.2_AntiIL5_none - none_none"="RV  -\nAnti-IL-5  -",
-                                "P259.2_AntiIL5_HRV - none_HRV"="+\n-",
-                                "P259.1_none_HRV - none_none"="RV  -\nEOS sup  -",
-                                "P259.1_EOS.supp_HRV - EOS.supp_none"="-\n+",
-                                "P259.1_EOS.supp_none - none_none"="RV  -\nEOS sup  -",
-                                "P259.1_EOS.supp_HRV - none_HRV"="+\n-"),
+                        "P259.2_none_HRV - none_none"='"-\n-"',
+                        "P259.2_AntiIL5_HRV - AntiIL5_none"='"-\n+"',
+                        "P259.2_AntiIL5_none - none_none"='"-\n-"',
+                        "P259.2_AntiIL5_HRV - none_HRV"='"+\n-"',
+                        "P259.1_none_HRV - none_none"='"RV            -\nEOS sup  -"',
+                        "P259.1_EOS.supp_HRV - EOS.supp_none"='"-\n+"',
+                        "P259.1_EOS.supp_none - none_none"='"RV            -\nEOS sup  -"',
+                        "P259.1_EOS.supp_HRV - none_HRV"='"+\n-"'),
          group2 = recode_factor(factor(group.long),
-                                "P259.2_none_HRV - none_none"="+\n-",
-                                "P259.2_AntiIL5_HRV - AntiIL5_none"="+\n+",
-                                "P259.2_AntiIL5_none - none_none"="-\n+",
-                                "P259.2_AntiIL5_HRV - none_HRV"="+\n+",
-                                "P259.1_none_HRV - none_none"="+\n-",
-                                "P259.1_EOS.supp_HRV - EOS.supp_none"="+\n+",
-                                "P259.1_EOS.supp_none - none_none"="-\n+",
-                                "P259.1_EOS.supp_HRV - none_HRV"="+\n+"),
+                          "P259.2_none_HRV - none_none"='"+\n-"',
+                          "P259.2_AntiIL5_HRV - AntiIL5_none"='"+  RV\n+  Anti-IL-5/5R"*alpha',
+                          "P259.2_AntiIL5_none - none_none"='"-\n+"',
+                          "P259.2_AntiIL5_HRV - none_HRV"='"+  RV\n+  Anti-IL-5/5R"*alpha',
+                          "P259.1_none_HRV - none_none"='"+\n-"',
+                          "P259.1_EOS.supp_HRV - EOS.supp_none"='"+\n+"',
+                          "P259.1_EOS.supp_none - none_none"='"-\n+"',
+                          "P259.1_EOS.supp_HRV - none_HRV"='"+\n+"'),
          facet.lab = recode_factor(factor(dataset),
-                                   "P259.1" = 'italic("Ex vivo")~"\nEOS sup"',
-                                   "P259.2" = 'italic("In vivo")~"\nAnti-IL-5"')) %>% 
+                            "P259.1" = 'atop(italic("Ex vivo"),"EOS sup")',
+                            "P259.2" = 'atop(italic("In vivo"),"Anti-IL-5/5R"*alpha)')) %>% 
   dplyr::select(facet.lab, hgnc_symbol, group1, group2, symbol)
 
 #Add y location for pval based on max expression in plot
@@ -110,8 +110,8 @@ GOI.pe <- dat.GOI.anno %>%
   ungroup() %>% 
   mutate(facet.lab = experiment,
          facet.lab = recode(facet.lab,
-                            "P259_1" = 'italic("Ex vivo")~"\nEOS sup"',
-                            "P259_2" = 'italic("In vivo")~"\nAnti-IL-5"')) %>% 
+                            "P259_1" = 'atop(italic("Ex vivo"),"EOS sup")',
+                            "P259_2" = 'atop(italic("In vivo"),"Anti-IL-5/5R"*alpha)')) %>% 
   #Add to pval data
   right_join(GOI.p) %>% 
   arrange(hgnc_symbol, experiment, group1, group2)
@@ -138,7 +138,7 @@ GOI.pey <- GOI.pe %>%
                                     ifelse(!is.na(y.position3),y.position3,
                                            ifelse(!is.na(y.position4),y.position4,NA))))) %>% 
   #Scale to max expression
-  mutate(y.position = (2^max.e)*((y.position+2)/11+1)) %>% 
+  mutate(y.position = (2^max.e)*((y.position+2)/11+0.85)) %>% 
   ungroup()
 
 #### Plot GSEA genes ####
@@ -166,10 +166,11 @@ plot.GOI1 <- dat.GOI.anno %>%
         panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank(),
         strip.background =element_rect(fill="white"),
-        axis.text.x=element_text(hjust=0.95),
-        panel.spacing.x = unit(2, "lines"))
+        axis.text.x=element_text(hjust=0.95,vjust=-0.5),
+        plot.margin = margin(0.2,0.2,0.2,0.2,"cm")) +
+  scale_x_discrete(labels = ggplot2:::parse_safe)
 
-plot.GOI1
+#plot.GOI1
 
 #### Plot addtl IFN genes
 plot.GOI2 <- dat.GOI.anno %>% 
@@ -196,13 +197,14 @@ plot.GOI2 <- dat.GOI.anno %>%
         panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank(),
         strip.background =element_rect(fill="white"),
-        axis.text.x=element_text(hjust=0.95),
-        panel.spacing.x = unit(2, "lines"))
-plot.GOI2
+        axis.text.x=element_text(hjust=1,vjust=-0.5),
+        plot.margin = margin(0.2,2,0.2,0.2,"cm")) +
+  scale_x_discrete(labels = ggplot2:::parse_safe)
+#plot.GOI2
 
 #### Save ####
 plot.GOIB <- plot_grid(plot.GOI2, NULL, rel_heights=c(0.88,1),nrow=2)
-plot.GOI.all <- plot_grid(plot.GOI1,NULL,plot.GOIB, rel_widths = c(1,0.1,1), nrow=1,
+plot.GOI.all <- plot_grid(plot.GOI1,NULL,plot.GOIB, rel_widths = c(1,0.1,1.25), nrow=1,
                           labels=c("A","","B"))
 
 ggsave("publication/fig/Fig8.genes.of.interest.pdf", plot.GOI.all,

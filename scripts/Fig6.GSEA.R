@@ -30,10 +30,10 @@ term.OI <- intersect(term.OI.t, term.OI.v)
 h.plot.dat <- H %>% 
   filter(pathway %in% term.OI) %>% 
   mutate(group1 = recode_factor(factor(group),
-                                "AntiIL5_HRV.AntiIL5_none.2"="+ Anti-IL-5",
-                                "none_HRV.none_none.2"="- Anti-IL-5",
-                                "EOS.supp_HRV.EOS.supp_none.1"="+ EOS sup",
-                                "none_HRV.none_none.1"="- EOS sup",
+                                "AntiIL5_HRV.AntiIL5_none.2"='"+ Anti-IL-5/5R"*alpha',
+                                "none_HRV.none_none.2"='"- Anti-IL-5/5R"*alpha',
+                                "EOS.supp_HRV.EOS.supp_none.1"='"+ EOS sup"',
+                                "none_HRV.none_none.1"='"- EOS sup"',
                                 
                                 "EOS.supp_HRV.none_HRV.1"="+ RV",
                                 "AntiIL5_HRV.none_HRV.2"="+ RV",
@@ -46,9 +46,9 @@ h.plot.dat <- H %>%
             "AntiIL5_HRV.AntiIL5_none.2"='italic("Ex vivo")~"RV-infected vs media"',
                                 
             "EOS.supp_HRV.none_HRV.1"='italic("Ex vivo")~"EOS supernatant vs none"',
-            "AntiIL5_HRV.none_HRV.2"='italic("In vivo")~"Anti-IL-5 vs none"',
+            "AntiIL5_HRV.none_HRV.2"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"',
             "EOS.supp_none.none_none.1"='italic("Ex vivo")~"EOS supernatant vs none"',
-            "AntiIL5_none.none_none.2"='italic("In vivo")~"Anti-IL-5 vs none"')) %>% 
+            "AntiIL5_none.none_none.2"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"')) %>% 
   mutate(Significance = ifelse(fgsea.FDR <= 0.05 & 
                                  gage.FDR <= 0.05 & 
                                  fgsea.FC == gage.FC, 
@@ -87,7 +87,8 @@ h.plot1 <- h.plot.dat %>%
   theme(strip.text.y = element_blank())+
   theme(panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank(),
-        strip.background =element_rect(fill="white"))
+        strip.background =element_rect(fill="white")) +
+  scale_x_discrete(labels = ggplot2:::parse_safe)
 
 #h.plot1
 
