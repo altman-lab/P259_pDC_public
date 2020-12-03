@@ -86,8 +86,8 @@ PCA2 <- PCA.dat %>%
   labs(x=PC1.label2, y=PC2.label2) +
   coord_fixed(ratio=1) +
   scale_color_manual(values = group.cols, 
-                     labels = c("media", "+ Anti-IL-5", 
-                                "+ RV", "+ RV + Anti-IL-5"),
+                     labels = c('media', bquote(+ "Anti-IL-5/5R"*alpha), 
+                                '+ RV', bquote("+ RV + Anti-IL-5/5R"*alpha)),
                      name="") +
   facet_wrap(~facet.lab, labeller = label_parsed) +
   theme(legend.position = "bottom") +
