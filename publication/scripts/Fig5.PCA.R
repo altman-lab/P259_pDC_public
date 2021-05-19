@@ -18,6 +18,25 @@ group.cols <- c("none:none"="#dadaeb",
 load("data_clean/P259_pDC_clean.RData")
 
 #### Calculate PCA ####
+## All
+samps0 <- dat.pDC.voom$targets %>% 
+  filter(virus=="HRV" & experiment == "P259_2")
+PCA0 <- as.data.frame(dat.pDC.voom_1$E) %>% 
+  rownames_to_column() %>% 
+  full_join(rownames_to_column(as.data.frame(dat.pDC.voom_2$E))) %>% 
+  column_to_rownames() %>% 
+  select(all_of(samps0$libID)) %>% 
+  t() %>% 
+  prcomp(scale. = TRUE)
+
+##Axes labels
+PC1.label0 <- paste("PC1 (", 
+                    round(summary(PCA0)$importance[2,1]*100, digits=1), 
+                    "%)", sep="")
+PC2.label0 <-paste("PC2 (", 
+                   round(summary(PCA0)$importance[2,2]*100, digits=1), 
+                   "%)", sep="")
+
 ## EOS supernatant experiment
 PCA1 <- as.data.frame(dat.pDC.voom_1$E) %>% 
   t() %>% 
@@ -45,11 +64,13 @@ PC2.label2 <-paste("PC2 (",
                    "%)", sep="")
 
 # Extract PC values and merge
-PCA.dat <- as.data.frame(PCA1$x) %>% 
+PCA.dat <- as.data.frame(PCA0$x) %>% 
   rownames_to_column("libID") %>%
+  mutate(calc="all") %>% 
+  bind_rows(rownames_to_column(as.data.frame(PCA1$x),"libID")) %>% 
   bind_rows(rownames_to_column(as.data.frame(PCA2$x),"libID")) %>% 
   # Select PCs
-  dplyr::select(libID, PC1, PC2) %>% 
+  dplyr::select(libID, PC1, PC2, calc) %>% 
   # Merge with metadata
   left_join(dat.pDC.voom$targets, by="libID") %>% 
   #Add facet labels
@@ -59,8 +80,24 @@ PCA.dat <- as.data.frame(PCA1$x) %>%
                             "P259_2" = 'italic("In vivo")~"Anti-IL-5/5R"*alpha'))
 
 #### Plots ####
-PCA1 <- PCA.dat %>% 
-  filter(experiment=="P259_1") %>% 
+PCA.dat0 <- PCA.dat %>% 
+  filter(calc=="all" & virus !="none") %>% 
+  mutate(virus.detail = recode(virus.detail, "oldHRV"="batch 1", "newHRV"="batch 2"))
+
+plot0 <- PCA.dat0 %>% 
+  ggplot(aes(PC1, PC2, color=virus.detail)) +
+  geom_line(data=filter(PCA.dat0, virus=="HRV"), aes(group=paste(IL5,donorID)), color="black") +
+  geom_point(size=5) +
+  #Beautify
+  theme_classic(base_size = 16) +
+  labs(x=PC1.label0, y=PC2.label0, color="RV") +
+  coord_fixed(ratio=1)  +
+  theme(legend.position = "bottom") +
+  guides(color=guide_legend(nrow=2)) +
+  stat_ellipse(level=0.90)
+
+plot1 <- PCA.dat %>% 
+  filter(experiment=="P259_1" & is.na(calc)) %>% 
   
   ggplot(aes(PC1, PC2, color=virus:IL5)) +
   geom_point(size=5) +
@@ -76,8 +113,8 @@ PCA1 <- PCA.dat %>%
   theme(legend.position = "bottom") +
   guides(color=guide_legend(nrow=2))
 
-PCA2 <- PCA.dat %>% 
-  filter(experiment=="P259_2") %>% 
+plot2 <- PCA.dat %>% 
+  filter(experiment=="P259_2" & is.na(calc)) %>% 
   
   ggplot(aes(PC1, PC2, color=virus:IL5)) +
   geom_point(size=5) +
@@ -94,6 +131,7 @@ PCA2 <- PCA.dat %>%
   guides(color=guide_legend(nrow=2))
 
 #### Save ####
-ggsave("publication/fig/Fig5.PCA.pdf", 
-       plot_grid(PCA1,PCA2, align = "hv", labels = c("A","B")),
-       width=10, height=5)
+ggsave("publication/fig/FigSX.PCA.pdf", 
+       plot_grid(plot0, plot1,plot2, align = "hv", nrow=1, axis="tb",
+                 labels = c("A","B","C")),
+       width=15, height=5)
