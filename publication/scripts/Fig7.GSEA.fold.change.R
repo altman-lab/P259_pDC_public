@@ -7,7 +7,7 @@ set.seed(4389)
 
 #### Data ####
 #List genes in each Hallmark term of interest
-myGO <- fgsea::gmtPathways("data_clean/Broad_gmt/h.all.v7.1.symbols.gmt")
+myGO <- fgsea::gmtPathways("data_clean/Broad_gmt/h.all.v7.4.symbols.gmt")
 GO.df <- plyr::ldply(myGO, rbind) %>% 
   rename(term = `.id`) %>% 
   pivot_longer(-term, values_to="hgnc_symbol")
@@ -100,7 +100,7 @@ h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>%
 #Set jitter
 pos <- position_jitter(width = 0.3, seed = 589, height = 0)
 
-#### List genes to label ####
+#### List top genes to label ####
 #Top N genes within panel
 no.genes <- 2
 #Significant Hallmark terms (in Fig 6)
@@ -190,6 +190,102 @@ to.label.df <- data.table::rbindlist(to.label, idcol = "term") %>%
 h.combo.plot.lab <- h.combo.plot %>% 
   left_join(to.label.df, by = c("term", "hgnc_symbol"))
 
+#### List leading edge genes to label ####
+gsea.LE <- read_csv("results/GSEA/h_GSEA.result.csv") %>% 
+  filter(pathway %in% c("HALLMARK_INTERFERON_ALPHA_RESPONSE",
+                        "HALLMARK_INTERFERON_GAMMA_RESPONSE",
+                        "HALLMARK_INFLAMMATORY_RESPONSE",
+                        "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION")) %>% 
+  #Add experi group
+  mutate(experi = c(rep("AntiIL5",nrow(.)/2),rep("EOSsup",nrow(.)/2))) %>% 
+  select(experi, group, pathway, fgsea.leadingEdge) %>% 
+  #Add FC group
+  mutate(group2 = ifelse(experi=="AntiIL5" & 
+                           group %in% c("none_HRVnone_none", "AntiIL5_HRVAntiIL5_none"), 
+                         "AntiIL5.RV",
+                         ifelse(experi=="EOSsup" & 
+                                  group %in% c("none_HRVnone_none", "EOSsupp_HRVEOSsupp_none"), 
+                                "EOSsup.RV",
+                                ifelse(group %in% c("AntiIL5_nonenone_none", "AntiIL5_HRVnone_HRV"),
+                                       "AntiIL5",
+                                       ifelse(group %in% c("EOSsupp_nonenone_none",
+                                                           "EOSsupp_HRVnone_HRV"),
+                                              "EOSsup", NA))))) %>% 
+  group_by(group2, pathway) %>% 
+  #group_by(experi, group, pathway) %>% 
+  summarise(genes = paste(fgsea.leadingEdge, collapse=";")) %>% 
+  separate(genes, into = as.character(c(1:500)), sep=";") %>% 
+  pivot_longer(as.character(c(1:500)), values_to = "gene") %>% 
+  drop_na(gene) %>% 
+  mutate(pathway = gsub("HALLMARK_","", pathway),
+         pathway = gsub("_"," ", pathway))
+
+#Significant Hallmark terms (in Fig 6)
+term.OI.ls <- c("INTERFERON ALPHA RESPONSE",
+                "INTERFERON GAMMA RESPONSE",
+                "INFLAMMATORY RESPONSE",
+                "EPITHELIAL MESENCHYMAL TRANSITION")
+
+to.label <- list()
+
+for(term.OI in term.OI.ls){
+  
+  temp <- gsea.LE %>% 
+    filter(pathway == term.OI)
+  
+  overlap.vec1 <- intersect(unique(temp[temp$group2=="EOSsup",]$gene),
+                            unique(temp[temp$group2=="EOSsup.RV",]$gene))
+  overlap.vec2 <- intersect(unique(temp[temp$group2=="AntiIL5",]$gene),
+                           unique(temp[temp$group2=="AntiIL5.RV",]$gene))
+  
+  #Save to list object 
+  to.label[[paste(term.OI, "P259.1", sep="_")]] <- overlap.vec1
+  to.label[[paste(term.OI, "P259.2", sep="_")]] <- overlap.vec2
+}
+
+## Save for use in Fig8
+save(to.label,  file = "publication/fig/to.label.LE.RData")
+           
+#Convert genes to list to df
+to.label.df <- plyr::ldply(to.label, data.frame, .id="term") %>% 
+  mutate(to.label = "y") %>% 
+  rename('hgnc_symbol'=`X..i..`) %>% 
+  separate(term, into=c("term","experiment"), sep="_")
+
+#add to data
+# h.combo.plot.lab <- h.combo.plot %>% 
+#   left_join(to.label.df, by = c("term", "hgnc_symbol", "experiment"))
+
+#### DEGs to label ####
+fdr.cut <- 0.1
+DEG1.v <- read_csv("results/gene_level/P259.1_gene_pval.csv") %>% 
+  filter(group %in% c("none_HRV - none_none", "EOS.supp_HRV - EOS.supp_none") &
+           adj.P.Val <= fdr.cut)
+DEG1.t <- read_csv("results/gene_level/P259.1_gene_pval.csv") %>% 
+  filter(group %in% c("EOS.supp_none - none_none", "EOS.supp_HRV - none_HRV") &
+           adj.P.Val <= fdr.cut)
+DEG1 <- intersect(DEG1.v$hgnc_symbol, DEG1.t$hgnc_symbol)
+
+DEG2.v <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>% 
+  filter(group %in% c("none_HRV - none_none", "AntiIL5_HRV - AntiIL5_none") &
+           adj.P.Val <= fdr.cut)
+DEG2.t <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>% 
+  filter(group %in% c("AntiIL5_none - none_none", "AntiIL5_HRV - none_HRV") &
+           adj.P.Val <= fdr.cut)
+DEG2 <- intersect(DEG2.v$hgnc_symbol, DEG2.t$hgnc_symbol)
+
+## Save for use in Fig8
+save(DEG1, DEG2,  file = "publication/fig/to.label.DEG.RData")
+
+#add to data
+h.combo.plot.lab <- h.combo.plot %>% 
+ mutate(to.label = ifelse(experiment == "P259.1" & hgnc_symbol %in% c(DEG1,DEG2) &
+                          hgnc_symbol %in% to.label.df[to.label.df$experiment=="P259.1",]$hgnc_symbol,
+                          "y",
+                          ifelse(experiment == "P259.2" & hgnc_symbol %in% c(DEG1,DEG2) &
+                          hgnc_symbol %in% to.label.df[to.label.df$experiment=="P259.2",]$hgnc_symbol,
+                                 "y", NA)))
+
 #### All plot data ####
 FC.plot.dat <- h.combo.plot.lab %>% 
   mutate(group = paste(experiment, group, sep="_")) %>% 
@@ -242,7 +338,7 @@ plot.v <- dat.v %>%
   geom_text_repel(data=filter(dat.v, !is.na(to.label)),
                   aes(label=hgnc_symbol), direction="both",
                   nudge_x=-0.4, 
-                  show.legend = FALSE, size=3) +
+                  show.legend = FALSE, size=3, max.overlaps=100) +
  #Add mean lines
   stat_summary(fun="mean", geom="crossbar")+
   facet_grid(term.ord~group2, scales="free", 
@@ -282,7 +378,7 @@ plot.t <- dat.t %>%
   geom_text_repel(data=filter(dat.t, !is.na(to.label)),
                   aes(label=hgnc_symbol), direction="both",
                   nudge_x=-0.4,
-                  show.legend = FALSE, size=3) +
+                  show.legend = FALSE, size=3, max.overlaps = 100) +
   #Add mean lines
   stat_summary(fun="mean", geom="crossbar")+
   facet_grid(term.ord~group2, scales="free", 
@@ -302,5 +398,5 @@ plot.t <- dat.t %>%
 fc.plot.all <- plot_grid(plot.v, plot.t, ncol=2, rel_widths = c(0.6,1),
                          labels=c("A","B"))
 #fc.plot.all
-ggsave("publication/fig/Fig7.GSEA.fold.change.pdf", fc.plot.all, 
+ggsave("publication/fig/Fig7.GSEA.fold.change2.pdf", fc.plot.all, 
        width = 20, height = 15)
