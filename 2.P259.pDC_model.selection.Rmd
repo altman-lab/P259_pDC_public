@@ -463,7 +463,7 @@ pval_1.delta.summ %>%
 ## Compare models
 
 ```{r echo=FALSE}
-fdr.cutoff <- 0.2
+fdr.cutoff <- 0.1
 ```
 
 Total genes significant in one or more models at FDR < `r fdr.cutoff`
@@ -512,7 +512,7 @@ par(mfrow = c(1,1))
   venn(ilab=FALSE, zcolor = "style",ilcs=1,sncs=1.5,
      x=venn.list)
   
-  title(sub="FDR < 0.2", line = -1, cex.sub=1.5)
+  title(sub="FDR < 0.1", line = -1, cex.sub=1.5)
 ```
 
 ## Save results
@@ -843,7 +843,7 @@ par(mfrow = c(1,1))
   venn(ilab=FALSE, zcolor = "style",ilcs=1,sncs=1.5,
      x=venn.list)
   
-  title(sub="FDR < 0.5", line = -1, cex.sub=1.5)
+  title(sub="FDR < 0.1", line = -1, cex.sub=1.5)
 ```
 
 ## Save results
