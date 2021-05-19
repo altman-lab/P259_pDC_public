@@ -100,33 +100,67 @@ source("https://raw.githubusercontent.com/kdillmcfarland/R_bioinformatic_scripts
 
 ```{r h, warnings=FALSE, message=FALSE, eval=FALSE}
 GSEA(gene_list = gene.ls, 
-     gmt_file="data_clean/Broad_gmt/h.all.v7.1.symbols.gmt")
+     gmt_file="data_clean/Broad_gmt/h.all.v7.4.symbols.gmt")
 ```
 
-#### Curated gene sets (C2)
+#### Curated canonical pathway gene sets (C2:CP)
 
 ```{r c2, warnings=FALSE, message=FALSE, eval=FALSE}
 GSEA(gene_list = gene.ls, 
-     gmt_file="data_clean/Broad_gmt/c2.all.v7.1.symbols.gmt")
+     gmt_file="data_clean/Broad_gmt/c2.cp.v7.4.symbols.gmt")
 ```
 
-#### GO gene sets (C5)
+#### GO biological procress gene sets (C5:GO:BP)
 
 ```{r c5, warnings=FALSE, message=FALSE, eval=FALSE}
 GSEA(gene_list = gene.ls, 
-     gmt_file="data_clean/Broad_gmt/c5.all.v7.1.symbols.gmt")
+     gmt_file="data_clean/Broad_gmt/c5.go.bp.v7.4.symbols.gmt")
 ```
 
 ## Significant GSEA
 
 ```{r echo=FALSE, message=FALSE}
+fdr.cut <- 0.1
 #Load results for faster knitting
-h_GSEA.result <- read_csv("results/GSEA_FoldChange/h_GSEA.result.csv")
-c2_GSEA.result <- read_csv("results/GSEA_FoldChange/c2_GSEA.result.csv")
-c5_GSEA.result <- read_csv("results/GSEA_FoldChange/c5_GSEA.result.csv")
+h_GSEA.result <- read_csv("results/GSEA/h_GSEA.result.csv")
+c2_GSEA.result <- read_csv("results/GSEA/c2_GSEA.result.csv")
+c5_GSEA.result <- read_csv("results/GSEA/c5_GSEA.result.csv")
+
+#Combine and filter signif
+GSEA.all <- bind_rows(h_GSEA.result,c2_GSEA.result,c5_GSEA.result)
+#list all terms with at least 1 significant treatment contrast
+term.OI.t <- GSEA.all %>% 
+  filter(fgsea.FDR <= fdr.cut & gage.FDR <= fdr.cut) %>% 
+  filter(group %in% c("AntiIL5_nonenone_none", "AntiIL5_HRVnone_HRV",
+                      "EOSsupp_nonenone_none", "EOSsupp_HRVnone_HRV")) %>% 
+  distinct(pathway) %>% unlist(use.names=FALSE)
+
+#list all terms with at least 1 significant virus contrast 
+term.OI.v <- GSEA.all %>% 
+  filter(fgsea.FDR <= fdr.cut & gage.FDR <= fdr.cut) %>% 
+  filter(group %in% c("none_HRVnone_none","AntiIL5_HRVAntiIL5_none",
+                      "EOSsupp_HRVEOSsupp_none")) %>% 
+  distinct(pathway) %>% unlist(use.names=FALSE)
+   
+#Find terms with both t and v cutoffs
+term.OI <- intersect(term.OI.t, term.OI.v)
+
+GSEA.signif <- GSEA.all %>% 
+  filter(pathway %in% term.OI)
 ```
 
 Gene sets of interest are those significant for both virus AND EOS supernatant or Anti-IL5 therapy. Results are only considered significant if both fgsea and gage methods meet the FDR threshold in the same fold change direction.
+
+```{R echo=FALSE}
+GSEA.signif %>% 
+  select(pathway, group, fgsea.FDR,fgsea.NES) %>% 
+  separate(pathway, into=c("set","pathway"), sep="_", extra = "merge") %>% 
+  select(set, pathway, group, fgsea.FDR,fgsea.NES) %>% 
+  arrange(set, pathway, fgsea.NES) %>% 
+  kable() %>%
+kable_styling(bootstrap_options = "striped", full_width = FALSE) %>% 
+  collapse_rows(1:2, valign = "top")
+```
 
 ```{r echo=FALSE}
 source("scripts/GSEA.score.plot.R")
