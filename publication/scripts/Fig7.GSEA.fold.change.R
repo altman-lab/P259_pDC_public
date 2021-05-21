@@ -90,8 +90,7 @@ h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>%
   summarise(value = mean(value, na.rm=TRUE)) %>% 
   ungroup() %>% 
   #Beautify for plotting
-  mutate(term = gsub("HALLMARK_","", term),
-         term = gsub("_"," ", term)) %>% 
+  mutate(term = gsub("HALLMARK_","", term)) %>% 
   mutate(col.group = ifelse(value <0, "down", "up")) %>% 
   mutate(group = factor(group, levels=c("treat.media","treat.virus",
                                         "virus.untreat","virus.treat")))
@@ -101,94 +100,94 @@ h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>%
 pos <- position_jitter(width = 0.3, seed = 589, height = 0)
 
 #### List top genes to label ####
-#Top N genes within panel
-no.genes <- 2
-#Significant Hallmark terms (in Fig 6)
-term.OI.ls <- c("INTERFERON ALPHA RESPONSE", "INTERFERON GAMMA RESPONSE",
-                "INFLAMMATORY RESPONSE",
-                "EPITHELIAL MESENCHYMAL TRANSITION")
-
-to.label <- list()
-
-for(term.OI in term.OI.ls){
-  #List genes in congruent direction
-  #Virus
-  if(term.OI == "EPITHELIAL MESENCHYMAL TRANSITION"){
-    genes.v <- h.combo.plot %>% 
-      #virus fold changes
-      filter(term ==term.OI &
-               group %in% c("virus.treat","virus.untreat")) %>% 
-      #All values negative (fold change down)
-      group_by(term, hgnc_symbol) %>% 
-      filter(max(value, na.rm=TRUE)<0) %>% 
-      ungroup() %>% 
-      distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-  } else{
-    genes.v <- h.combo.plot %>% 
-      #virus fold changes
-      filter(term ==term.OI &
-               group %in% c("virus.treat","virus.untreat")) %>% 
-      #All values position (fold change up)
-      group_by(term, hgnc_symbol) %>% 
-      filter(min(value, na.rm=TRUE)>0) %>% 
-      ungroup() %>% 
-      distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-  }
-  
-  #EOS: down fold change
-  genes.eos <- h.combo.plot %>% 
-    filter(term == term.OI & group %in% c("treat.media","treat.virus") &
-             experiment == "P259.1") %>% 
-    group_by(term, hgnc_symbol) %>% 
-    filter(max(value, na.rm=TRUE)<0) %>% 
-    ungroup() %>% 
-    distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-  
-  #AntiIL5: up fold change
-  genes.aIL5 <- h.combo.plot %>% 
-    filter(term == term.OI & group %in% c("treat.media","treat.virus") &
-             experiment == "P259.2") %>% 
-    group_by(term, hgnc_symbol) %>% 
-    filter(min(value, na.rm=TRUE)>0) %>% 
-    ungroup() %>% 
-    distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-  
-  #List congruent for all genes
-  genes.all <- intersect(genes.v, genes.eos)
-  genes.all <- intersect(genes.all, genes.aIL5)
-  
-  #Save to list object if not 0
-  if(length(genes.all)>0){
-    #Find max FC in each panel
-    max.FC <- h.combo.plot %>% 
-      filter(term ==term.OI & hgnc_symbol %in% genes.all) %>% 
-      mutate(fc.group = ifelse(group %in% c("virus.untreat", "virus.treat"), "virus",
-                               ifelse(experiment == "P259.1", "eos","aIL5"))) %>% 
-      group_by(term, fc.group, hgnc_symbol) %>% 
-      summarise(max.FC = max(abs(value), na.rm = TRUE)) %>% 
-      ungroup() %>% 
-      #keep top X per group
-      group_by(term, fc.group) %>% 
-      slice_max(max.FC,n=no.genes) %>%
-      ungroup() %>% 
-      arrange(hgnc_symbol) 
-    
-    to.label[[term.OI]] <- max.FC %>% distinct(hgnc_symbol)
-  } else{
-    to.label[[term.OI]] <- data.frame(hgnc_symbol="none")
-  }
-}
-
-## Save for use in Fig8
-save(to.label,  file = "publication/fig/to.label.RData")
-
-#Convert genes to list to df
-to.label.df <- data.table::rbindlist(to.label, idcol = "term") %>% 
-  mutate(to.label = "y")
-
-#add to data
-h.combo.plot.lab <- h.combo.plot %>% 
-  left_join(to.label.df, by = c("term", "hgnc_symbol"))
+# #Top N genes within panel
+# no.genes <- 2
+# #Significant Hallmark terms (in Fig 6)
+# term.OI.ls <- c("INTERFERON_ALPHA RESPONSE", "INTERFERON_GAMMA_RESPONSE",
+#                 "INFLAMMATORY_RESPONSE",
+#                 "EPITHELIAL_MESENCHYMAL_TRANSITION")
+# 
+# to.label <- list()
+# 
+# for(term.OI in term.OI.ls){
+#   #List genes in congruent direction
+#   #Virus
+#   if(term.OI == "EPITHELIAL_MESENCHYMAL_TRANSITION"){
+#     genes.v <- h.combo.plot %>%
+#       #virus fold changes
+#       filter(term ==term.OI &
+#                group %in% c("virus.treat","virus.untreat")) %>%
+#       #All values negative (fold change down)
+#       group_by(term, hgnc_symbol) %>%
+#       filter(max(value, na.rm=TRUE)<0) %>%
+#       ungroup() %>%
+#       distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
+#   } else{
+#     genes.v <- h.combo.plot %>%
+#       #virus fold changes
+#       filter(term ==term.OI &
+#                group %in% c("virus.treat","virus.untreat")) %>%
+#       #All values position (fold change up)
+#       group_by(term, hgnc_symbol) %>%
+#       filter(min(value, na.rm=TRUE)>0) %>%
+#       ungroup() %>%
+#       distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
+#   }
+# 
+#   #EOS: down fold change
+#   genes.eos <- h.combo.plot %>%
+#     filter(term == term.OI & group %in% c("treat.media","treat.virus") &
+#              experiment == "P259.1") %>%
+#     group_by(term, hgnc_symbol) %>%
+#     filter(max(value, na.rm=TRUE)<0) %>%
+#     ungroup() %>%
+#     distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
+# 
+#   #AntiIL5: up fold change
+#   genes.aIL5 <- h.combo.plot %>%
+#     filter(term == term.OI & group %in% c("treat.media","treat.virus") &
+#              experiment == "P259.2") %>%
+#     group_by(term, hgnc_symbol) %>%
+#     filter(min(value, na.rm=TRUE)>0) %>%
+#     ungroup() %>%
+#     distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
+# 
+#   #List congruent for all genes
+#   genes.all <- intersect(genes.v, genes.eos)
+#   genes.all <- intersect(genes.all, genes.aIL5)
+# 
+#   #Save to list object if not 0
+#   if(length(genes.all)>0){
+#     #Find max FC in each panel
+#     max.FC <- h.combo.plot %>%
+#       filter(term ==term.OI & hgnc_symbol %in% genes.all) %>%
+#       mutate(fc.group = ifelse(group %in% c("virus.untreat", "virus.treat"), "virus",
+#                                ifelse(experiment == "P259.1", "eos","aIL5"))) %>%
+#       group_by(term, fc.group, hgnc_symbol) %>%
+#       summarise(max.FC = max(abs(value), na.rm = TRUE)) %>%
+#       ungroup() %>%
+#       #keep top X per group
+#       group_by(term, fc.group) %>%
+#       slice_max(max.FC,n=no.genes) %>%
+#       ungroup() %>%
+#       arrange(hgnc_symbol)
+# 
+#     to.label[[term.OI]] <- max.FC %>% distinct(hgnc_symbol)
+#   } else{
+#     to.label[[term.OI]] <- data.frame(hgnc_symbol="none")
+#   }
+# }
+# 
+# ## Save for use in Fig8
+# save(to.label,  file = "publication/fig/to.label.RData")
+# 
+# #Convert genes to list to df
+# to.label.df <- data.table::rbindlist(to.label, idcol = "term") %>%
+#   mutate(to.label = "y")
+# 
+# #add to data
+# h.combo.plot.lab <- h.combo.plot %>%
+#   left_join(to.label.df, by = c("term", "hgnc_symbol"))
 
 #### List leading edge genes to label ####
 gsea.LE <- read_csv("results/GSEA/h_GSEA.result.csv") %>% 
@@ -198,7 +197,7 @@ gsea.LE <- read_csv("results/GSEA/h_GSEA.result.csv") %>%
                         "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION")) %>% 
   #Add experi group
   mutate(experi = c(rep("AntiIL5",nrow(.)/2),rep("EOSsup",nrow(.)/2))) %>% 
-  select(experi, group, pathway, fgsea.leadingEdge) %>% 
+  dplyr::select(experi, group, pathway, fgsea.leadingEdge) %>% 
   #Add FC group
   mutate(group2 = ifelse(experi=="AntiIL5" & 
                            group %in% c("none_HRVnone_none", "AntiIL5_HRVAntiIL5_none"), 
@@ -217,14 +216,13 @@ gsea.LE <- read_csv("results/GSEA/h_GSEA.result.csv") %>%
   separate(genes, into = as.character(c(1:500)), sep=";") %>% 
   pivot_longer(as.character(c(1:500)), values_to = "gene") %>% 
   drop_na(gene) %>% 
-  mutate(pathway = gsub("HALLMARK_","", pathway),
-         pathway = gsub("_"," ", pathway))
+  mutate(pathway = gsub("HALLMARK_","", pathway))
 
 #Significant Hallmark terms (in Fig 6)
-term.OI.ls <- c("INTERFERON ALPHA RESPONSE",
-                "INTERFERON GAMMA RESPONSE",
-                "INFLAMMATORY RESPONSE",
-                "EPITHELIAL MESENCHYMAL TRANSITION")
+term.OI.ls <- c("INTERFERON_ALPHA_RESPONSE",
+                "INTERFERON_GAMMA_RESPONSE",
+                "INFLAMMATORY_RESPONSE",
+                "EPITHELIAL_MESENCHYMAL_TRANSITION")
 
 to.label <- list()
 
@@ -250,7 +248,7 @@ save(to.label,  file = "publication/fig/to.label.LE.RData")
 to.label.df <- plyr::ldply(to.label, data.frame, .id="term") %>% 
   mutate(to.label = "y") %>% 
   rename('hgnc_symbol'=`X..i..`) %>% 
-  separate(term, into=c("term","experiment"), sep="_")
+  separate(term, into=c("term","experiment"), sep="_(?=[^_]+$)")
 
 #add to data
 # h.combo.plot.lab <- h.combo.plot %>% 
@@ -310,19 +308,21 @@ FC.plot.dat <- h.combo.plot.lab %>%
             "P259.1_treat.media"='italic("Ex vivo")~"EOS supernatant vs none"',
             "P259.2_treat.media"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"')) %>% 
   #Reorder terms
-  mutate(term.ord = recode_factor(factor(term), 
-            "INTERFERON ALPHA RESPONSE"="INTERFERON\nALPHA\nRESPONSE",
-            "INTERFERON GAMMA RESPONSE"="INTERFERON\nGAMMA\nRESPONSE",
-            "INFLAMMATORY RESPONSE"="INFLAMMATORY\nRESPONSE",
-            "EPITHELIAL MESENCHYMAL TRANSITION"="EPITHELIAL\nMESENCHYMAL\nTRANSITION"))
+  mutate(term = gsub("HALLMARK_", "", term)) %>% 
+  #Reorder terms
+  mutate(term.ord = recode_factor(factor(term),
+                                     "INTERFERON_ALPHA_RESPONSE"="IFNA response",
+                                     "INTERFERON_GAMMA_RESPONSE"="IFNG response",
+                                     "INFLAMMATORY_RESPONSE"="Inflammatory response",
+                                     "EPITHELIAL_MESENCHYMAL_TRANSITION"="Epithelial mesenchymal transition"))
 
 #### Plot A: VIRUS ####
 dat.v <- FC.plot.dat %>% 
   filter(group2 == 'italic("Ex vivo")~"RV-infected vs media"' &
-           term.ord %in% c("INTERFERON\nALPHA\nRESPONSE",
-                           "INTERFERON\nGAMMA\nRESPONSE",
-                           "INFLAMMATORY\nRESPONSE",
-                           "EPITHELIAL\nMESENCHYMAL\nTRANSITION")) %>% 
+           term %in% c("INTERFERON_ALPHA_RESPONSE",
+                           "INTERFERON_GAMMA_RESPONSE",
+                           "INFLAMMATORY_RESPONSE",
+                           "EPITHELIAL_MESENCHYMAL_TRANSITION")) %>% 
   droplevels()
 
 plot.v <- dat.v %>% 
@@ -348,7 +348,7 @@ plot.v <- dat.v %>%
   theme_bw() +
   labs(x="", y="Gene mean log2 fold change") +
   scale_color_manual(values=c("down"="#6baed6","up"="#ef3b2c")) +
-  theme(strip.text.y = element_blank())+
+  #theme(strip.text.y = element_blank())+
   theme(legend.position = "none",
         panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank(),
@@ -359,10 +359,10 @@ plot.v <- dat.v %>%
 #### Plot B/C: EOS supernatant or Anti-IL5 therapy ####
 dat.t <- FC.plot.dat %>% 
   filter(group2 != 'italic("Ex vivo")~"RV-infected vs media"' &
-           term.ord %in% c("INTERFERON\nALPHA\nRESPONSE",
-                           "INTERFERON\nGAMMA\nRESPONSE",
-                           "INFLAMMATORY\nRESPONSE",
-                           "EPITHELIAL\nMESENCHYMAL\nTRANSITION")) %>% 
+           term %in% c("INTERFERON_ALPHA_RESPONSE",
+                           "INTERFERON_GAMMA_RESPONSE",
+                           "INFLAMMATORY_RESPONSE",
+                           "EPITHELIAL_MESENCHYMAL_TRANSITION")) %>% 
   droplevels()
 
 plot.t <- dat.t %>% 

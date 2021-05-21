@@ -65,14 +65,13 @@ h.plot.dat <- H %>%
                                         gage.FDR <= 0.1 & 
                                         fgsea.FC == gage.FC, 
                                       "FDR < 0.1", "NS"))) %>% 
-  mutate(pathway = gsub("HALLMARK_", "", pathway),
-         pathway2 = gsub("_", "\n", pathway)) %>% 
+  mutate(pathway = gsub("HALLMARK_", "", pathway)) %>% 
   #Reorder terms
-  mutate(pathway.ord = factor(pathway2,
-                              levels=c("INTERFERON\nALPHA\nRESPONSE",
-                              "INTERFERON\nGAMMA\nRESPONSE",
-                              "INFLAMMATORY\nRESPONSE",
-                              "EPITHELIAL\nMESENCHYMAL\nTRANSITION")))
+  mutate(pathway.ord = recode_factor(factor(pathway),
+                                     "INTERFERON_ALPHA_RESPONSE"="IFNA response",
+                                     "INTERFERON_GAMMA_RESPONSE"="IFNG response",
+                                     "INFLAMMATORY_RESPONSE"="Inflammatory\nresponse",
+                                     "EPITHELIAL_MESENCHYMAL_TRANSITION"="Epithelial\nmesenchymal\ntransition"))
 
 #### Plot A: virus ####
 h.plot1 <- h.plot.dat %>% 
