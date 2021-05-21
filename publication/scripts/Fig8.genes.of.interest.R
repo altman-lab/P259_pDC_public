@@ -9,10 +9,11 @@ load("data_clean/P259_pDC_clean.RData")
 
 #### List all genes to plot ####
 #Genes to label from Fig7
-load("publication/fig/to.label.RData")
+load("publication/fig/to.label.DEG.RData")
+load("publication/fig/to.label.LE.RData")
 
-## IFN and inflam. None for epiMT
-GOI <- unique(unlist(to.label[1:3], use.names=FALSE))
+LE <- unique(unlist(to.label[1:3], use.names=FALSE))
+GOI <- intersect(c(DEG1,DEG2),LE)
 #Add IFN genes
 GOI2 <- c("IFNA2","IFNG")
 
@@ -142,8 +143,8 @@ GOI.pey <- GOI.pe %>%
   ungroup()
 
 #### Plot GSEA genes ####
-plot.GOI1 <- dat.GOI.anno %>% 
-  filter(hgnc_symbol %in% GOI) %>% 
+plot.GOI1a <- dat.GOI.anno %>% 
+  filter(hgnc_symbol %in% sort(GOI)[1:4]) %>% 
   droplevels() %>% 
   
   ggplot(aes(x=x.lab, y=2^expression, color=donorID)) +
@@ -157,7 +158,7 @@ plot.GOI1 <- dat.GOI.anno %>%
   facet_grid(hgnc_symbol~facet.lab, scales="free", 
              labeller = labeller(facet.lab=label_parsed)) +
   #Add pval
-  stat_pvalue_manual(data=filter(GOI.pey, hgnc_symbol %in% GOI), 
+  stat_pvalue_manual(data=filter(GOI.pey, hgnc_symbol %in% sort(GOI)[1:4]), 
                      label="symbol", xmin="group1", xmax="group2") +
   # #Beautify
   theme_bw() +
@@ -170,7 +171,36 @@ plot.GOI1 <- dat.GOI.anno %>%
         plot.margin = margin(0.2,0.2,0.2,0.2,"cm")) +
   scale_x_discrete(labels = ggplot2:::parse_safe)
 
-#plot.GOI1
+plot.GOI1b <- dat.GOI.anno %>% 
+  filter(hgnc_symbol %in% sort(GOI)[5:8]) %>% 
+  droplevels() %>% 
+  
+  ggplot(aes(x=x.lab, y=2^expression, color=donorID)) +
+  geom_jitter(width=0.1, height=0) +
+  stat_summary(fun.data=mean_sdl, 
+               fun.args = list(mult=1), 
+               geom="errorbar", color="black", width=0.25) +
+  stat_summary(fun=mean, geom="errorbar", 
+               aes(ymax=..y.., ymin=..y..),
+               color="black", width=0.5) +
+  facet_grid(hgnc_symbol~facet.lab, scales="free", 
+             labeller = labeller(facet.lab=label_parsed)) +
+  #Add pval
+  stat_pvalue_manual(data=filter(GOI.pey, hgnc_symbol %in% sort(GOI)[5:8]), 
+                     label="symbol", xmin="group1", xmax="group2") +
+  # #Beautify
+  theme_bw() +
+  labs(x="", y="Normalized expression") +
+  theme(legend.position = "none",
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.background =element_rect(fill="white"),
+        axis.text.x=element_text(hjust=0.95,vjust=-0.5),
+        plot.margin = margin(0.2,0.2,0.2,0.2,"cm")) +
+  scale_x_discrete(labels = ggplot2:::parse_safe)
+
+#plot.GOI1a
+#plot.GOI1b
 
 #### Plot addtl IFN genes
 plot.GOI2 <- dat.GOI.anno %>% 
@@ -203,10 +233,11 @@ plot.GOI2 <- dat.GOI.anno %>%
 #plot.GOI2
 
 #### Save ####
-plot.GOIB <- plot_grid(plot.GOI2, NULL, rel_heights=c(0.88,1),nrow=2)
-plot.GOI.all <- plot_grid(plot.GOI1,NULL,plot.GOIB, rel_widths = c(1,0.1,1.25), nrow=1,
-                          labels=c("A","","B"))
+plot.GOIB <- plot_grid(plot.GOI2, NULL, rel_heights=c(1.3,1),nrow=2)
+plot.GOI.all <- plot_grid(plot.GOI1a,NULL,plot.GOI1b,NULL,plot.GOIB, 
+                          rel_widths = c(1,0.15,1,0.15,1.25), nrow=1,
+                          labels=c("A","","","","B"))
 
 ggsave("publication/fig/Fig8.genes.of.interest.pdf", plot.GOI.all,
-       height=10, width=7)
+       height=8, width=10)
 
