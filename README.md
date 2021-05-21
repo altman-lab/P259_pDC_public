@@ -28,8 +28,9 @@ Figures and tables in publication. Reproducible scripts for figure and table gen
 
 ## results
 
-* **gene_level**:  linear models of gene expression
-* **GSEA_FoldChange**:  Gene set enrichment analysis
+* **enrichment/**: Hypergeometric enrichment of gene sets in differentially expressed genes (DEG)
+* **gene_level/**:  linear models of gene expression
+* **GSEA/**:  Gene set enrichment analysis
 
 ## Rmarkdowns
 All analyses run from the environment created in P259_pDC.Rproj
@@ -39,4 +40,4 @@ All analyses run from the environment created in P259_pDC.Rproj
 2. **model.selection**:  Linear model exploration including interaction, pairwise contrasts, and post-pre (delta)
 		+ Results saved to results/gene_level
 3. **GSEA**:  Gene set enrichment analysis of Broad Hallmark, curated, and GO gene sets
-		+ Results saved to results/GSEA_FoldChange
+		+ Results saved to results/GSEA/ and results/enrichment
