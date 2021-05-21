@@ -189,8 +189,6 @@ DEG2.t <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>%
   filter(group %in% c("AntiIL5_none - none_none", "AntiIL5_HRV - none_HRV") &
            adj.P.Val <= fdr.cut)
 
-#Format to ENTREZ
-
 #Format in list
 DEG.ls <- list()
 DEG.ls[["EOSsup"]] <- intersect(DEG1.v$hgnc_symbol, DEG1.t$hgnc_symbol)
