@@ -238,6 +238,6 @@ plot.GOI.all <- plot_grid(plot.GOI1a,NULL,plot.GOI1b,NULL,plot.GOIB,
                           rel_widths = c(1,0.15,1,0.15,1.25), nrow=1,
                           labels=c("A","","","","B"))
 
-ggsave("publication/fig/Fig8.genes.of.interest.pdf", plot.GOI.all,
+ggsave("publication/fig/Fig7.genes.of.interest.pdf", plot.GOI.all,
        height=8, width=10)
 

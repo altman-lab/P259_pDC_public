@@ -9,7 +9,7 @@ set.seed(4389)
 #List genes in each Hallmark term of interest
 myGO <- fgsea::gmtPathways("data_clean/Broad_gmt/h.all.v7.4.symbols.gmt")
 GO.df <- plyr::ldply(myGO, rbind) %>% 
-  rename(term = `.id`) %>% 
+  dplyr::rename(term = `.id`) %>% 
   pivot_longer(-term, values_to="hgnc_symbol")
 
 #Expression data
@@ -59,7 +59,7 @@ h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>%
   dplyr::select(-IL5, -virus.detail, -libID) %>% 
   #Averages
   group_by(term, hgnc_symbol, experiment, group) %>% 
-  summarise(meanE = mean(expression, na.rm=TRUE)) %>% 
+  dplyr::summarise(meanE = mean(expression, na.rm=TRUE)) %>% 
   #Fold change
   pivot_wider(names_from = group, values_from = meanE) %>% 
   rowwise() %>% 
@@ -87,7 +87,7 @@ h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>%
   #Average old and new HRV values
   separate(name, into=c("group"), sep="_") %>% 
   group_by(term, hgnc_symbol, experiment, group) %>% 
-  summarise(value = mean(value, na.rm=TRUE)) %>% 
+  dplyr::summarise(value = mean(value, na.rm=TRUE)) %>% 
   ungroup() %>% 
   #Beautify for plotting
   mutate(term = gsub("HALLMARK_","", term)) %>% 
@@ -98,96 +98,6 @@ h.combo.plot <- bind_rows(h.combo.plot_1, h.combo.plot_2) %>%
 #### Plot parameters ####
 #Set jitter
 pos <- position_jitter(width = 0.3, seed = 589, height = 0)
-
-#### List top genes to label ####
-# #Top N genes within panel
-# no.genes <- 2
-# #Significant Hallmark terms (in Fig 6)
-# term.OI.ls <- c("INTERFERON_ALPHA RESPONSE", "INTERFERON_GAMMA_RESPONSE",
-#                 "INFLAMMATORY_RESPONSE",
-#                 "EPITHELIAL_MESENCHYMAL_TRANSITION")
-# 
-# to.label <- list()
-# 
-# for(term.OI in term.OI.ls){
-#   #List genes in congruent direction
-#   #Virus
-#   if(term.OI == "EPITHELIAL_MESENCHYMAL_TRANSITION"){
-#     genes.v <- h.combo.plot %>%
-#       #virus fold changes
-#       filter(term ==term.OI &
-#                group %in% c("virus.treat","virus.untreat")) %>%
-#       #All values negative (fold change down)
-#       group_by(term, hgnc_symbol) %>%
-#       filter(max(value, na.rm=TRUE)<0) %>%
-#       ungroup() %>%
-#       distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-#   } else{
-#     genes.v <- h.combo.plot %>%
-#       #virus fold changes
-#       filter(term ==term.OI &
-#                group %in% c("virus.treat","virus.untreat")) %>%
-#       #All values position (fold change up)
-#       group_by(term, hgnc_symbol) %>%
-#       filter(min(value, na.rm=TRUE)>0) %>%
-#       ungroup() %>%
-#       distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-#   }
-# 
-#   #EOS: down fold change
-#   genes.eos <- h.combo.plot %>%
-#     filter(term == term.OI & group %in% c("treat.media","treat.virus") &
-#              experiment == "P259.1") %>%
-#     group_by(term, hgnc_symbol) %>%
-#     filter(max(value, na.rm=TRUE)<0) %>%
-#     ungroup() %>%
-#     distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-# 
-#   #AntiIL5: up fold change
-#   genes.aIL5 <- h.combo.plot %>%
-#     filter(term == term.OI & group %in% c("treat.media","treat.virus") &
-#              experiment == "P259.2") %>%
-#     group_by(term, hgnc_symbol) %>%
-#     filter(min(value, na.rm=TRUE)>0) %>%
-#     ungroup() %>%
-#     distinct(hgnc_symbol) %>% unlist(use.names = FALSE)
-# 
-#   #List congruent for all genes
-#   genes.all <- intersect(genes.v, genes.eos)
-#   genes.all <- intersect(genes.all, genes.aIL5)
-# 
-#   #Save to list object if not 0
-#   if(length(genes.all)>0){
-#     #Find max FC in each panel
-#     max.FC <- h.combo.plot %>%
-#       filter(term ==term.OI & hgnc_symbol %in% genes.all) %>%
-#       mutate(fc.group = ifelse(group %in% c("virus.untreat", "virus.treat"), "virus",
-#                                ifelse(experiment == "P259.1", "eos","aIL5"))) %>%
-#       group_by(term, fc.group, hgnc_symbol) %>%
-#       summarise(max.FC = max(abs(value), na.rm = TRUE)) %>%
-#       ungroup() %>%
-#       #keep top X per group
-#       group_by(term, fc.group) %>%
-#       slice_max(max.FC,n=no.genes) %>%
-#       ungroup() %>%
-#       arrange(hgnc_symbol)
-# 
-#     to.label[[term.OI]] <- max.FC %>% distinct(hgnc_symbol)
-#   } else{
-#     to.label[[term.OI]] <- data.frame(hgnc_symbol="none")
-#   }
-# }
-# 
-# ## Save for use in Fig8
-# save(to.label,  file = "publication/fig/to.label.RData")
-# 
-# #Convert genes to list to df
-# to.label.df <- data.table::rbindlist(to.label, idcol = "term") %>%
-#   mutate(to.label = "y")
-# 
-# #add to data
-# h.combo.plot.lab <- h.combo.plot %>%
-#   left_join(to.label.df, by = c("term", "hgnc_symbol"))
 
 #### List leading edge genes to label ####
 gsea.LE <- read_csv("results/GSEA/h_GSEA.result.csv") %>% 
@@ -212,7 +122,7 @@ gsea.LE <- read_csv("results/GSEA/h_GSEA.result.csv") %>%
                                               "EOSsup", NA))))) %>% 
   group_by(group2, pathway) %>% 
   #group_by(experi, group, pathway) %>% 
-  summarise(genes = paste(fgsea.leadingEdge, collapse=";")) %>% 
+  dplyr::summarise(genes = paste(fgsea.leadingEdge, collapse=";")) %>% 
   separate(genes, into = as.character(c(1:500)), sep=";") %>% 
   pivot_longer(as.character(c(1:500)), values_to = "gene") %>% 
   drop_na(gene) %>% 
@@ -247,12 +157,8 @@ save(to.label,  file = "publication/fig/to.label.LE.RData")
 #Convert genes to list to df
 to.label.df <- plyr::ldply(to.label, data.frame, .id="term") %>% 
   mutate(to.label = "y") %>% 
-  rename('hgnc_symbol'=`X..i..`) %>% 
+  dplyr::rename('hgnc_symbol'=`X..i..`) %>% 
   separate(term, into=c("term","experiment"), sep="_(?=[^_]+$)")
-
-#add to data
-# h.combo.plot.lab <- h.combo.plot %>% 
-#   left_join(to.label.df, by = c("term", "hgnc_symbol", "experiment"))
 
 #### DEGs to label ####
 fdr.cut <- 0.1
@@ -398,5 +304,5 @@ plot.t <- dat.t %>%
 fc.plot.all <- plot_grid(plot.v, plot.t, ncol=2, rel_widths = c(0.6,1),
                          labels=c("A","B"))
 #fc.plot.all
-ggsave("publication/fig/Fig7.GSEA.fold.change2.pdf", fc.plot.all, 
+ggsave("publication/fig/Fig6.GSEA.fold.change.pdf", fc.plot.all, 
        width = 20, height = 15)

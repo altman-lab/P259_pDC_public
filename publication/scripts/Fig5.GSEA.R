@@ -124,5 +124,5 @@ h.plot2 <- h.plot.dat %>%
 h.plot.all <- plot_grid(h.plot1, h.plot2, ncol=2, rel_widths = c(0.55,1),
                         labels=c("A","B")) 
 #h.plot.all
-ggsave("publication/fig/Fig6.GSEA.pdf", h.plot.all, 
+ggsave("publication/fig/Fig5.GSEA.pdf", h.plot.all, 
        width = 11, height = 5)
