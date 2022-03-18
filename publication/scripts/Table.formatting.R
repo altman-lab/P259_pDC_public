@@ -63,7 +63,7 @@ read_csv("results/GSEA/h_GSEA.result.csv") %>%
   #Add experiment variable
   mutate(experiment = ifelse(grepl(".1", contrast), "P259_1", "P259_2")) %>%
   #Set gene set variable
-  mutate(gene.set = "HALLMARK",
+  mutate(gene.set = "H",
          pathway = gsub("HALLMARK_", "", pathway)) %>% 
   #Format contrast to match model results
   mutate(contrast = gsub(".1", "", contrast),
@@ -72,7 +72,20 @@ read_csv("results/GSEA/h_GSEA.result.csv") %>%
          contrast = gsub("[.]A"," - A", contrast),
          contrast = gsub("[.]E"," - E", contrast)) %>% 
   #Reorder variables
-  select(experiment, gene.set, pathway, contrast, everything()) %>% 
-  arrange(experiment, pathway, contrast) %>% 
+  select(experiment, gene.set, pathway, contrast, fgsea.FDR, fgsea.NES, fgsea.leadingEdge,
+         gage.FDR) %>% 
+  arrange(experiment, pathway, contrast, -fgsea.FDR) %>% 
+  filter(fgsea.FDR < 0.1) %>% 
   #Save
   write_csv(., "publication/table/TableE5.GSEA.csv") 
+
+## Hypergeo enrichment
+read_csv("results/enrichment/enrich_DEG_H.csv") %>% 
+  bind_rows(read_csv("results/enrichment/enrich_DEG_C2_CP.csv")) %>% 
+  filter(p.adjust < 0.05 & !is.na(p.adjust)) %>% 
+  rename(gene.set=category, pathway=Description, FDR=p.adjust) %>% 
+  mutate(experiment = ifelse(group == "AntiIL5", "P259_2", "P259_1"),
+         genes = gsub("/",";", SYMBOLs)) %>% 
+  select(experiment, gene.set, pathway, genes, FDR) %>% 
+  #Save
+  write_csv(., "publication/table/TableE6.hypergeo.enrich.csv") 

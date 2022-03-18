@@ -45,14 +45,14 @@ h.plot.dat <- H %>%
                          ifelse(group1 == "none_HRVnone_none" & experi == "EOSsup",
                                 '"- EOS sup"', group1)),
          group2 = recode_factor(factor(group),
-            "none_HRVnone_none"='italic("Ex vivo")~"RV-infected vs media"',
-            "EOSsupp_HRVEOSsupp_none"='italic("Ex vivo")~"RV-infected vs media"',
-            "AntiIL5_HRVAntiIL5_none"='italic("Ex vivo")~"RV-infected vs media"',
+            "none_HRVnone_none"='"RV-infected vs media"',
+            "EOSsupp_HRVEOSsupp_none"='"RV-infected vs media"',
+            "AntiIL5_HRVAntiIL5_none"='"RV-infected vs media"',
                                 
-            "EOSsupp_HRVnone_HRV"='italic("Ex vivo")~"EOS supernatant vs none"',
-            "AntiIL5_HRVnone_HRV"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"',
-            "EOSsupp_nonenone_none"='italic("Ex vivo")~"EOS supernatant vs none"',
-            "AntiIL5_nonenone_none"='italic("In vivo")~"Anti-IL-5/5R"*alpha~"vs none"')) %>% 
+            "EOSsupp_HRVnone_HRV"='"EOS sup vs none"',
+            "AntiIL5_HRVnone_HRV"='"Anti-IL-5/5R"*alpha~"vs none"',
+            "EOSsupp_nonenone_none"='"EOS sup vs none"',
+            "AntiIL5_nonenone_none"='"Anti-IL-5/5R"*alpha~"vs none"')) %>% 
   #order factors
   mutate(group1 = factor(group1, levels=c('"+ Anti-IL-5/5R"*alpha','"- Anti-IL-5/5R"*alpha',
                                           '"+ EOS sup"','"- EOS sup"', 
@@ -75,7 +75,7 @@ h.plot.dat <- H %>%
 
 #### Plot A: virus ####
 h.plot1 <- h.plot.dat %>% 
-  filter(group2=='italic("Ex vivo")~"RV-infected vs media"') %>% 
+  filter(group2=='"RV-infected vs media"') %>% 
   
   ggplot(aes(x=group1, y=fgsea.NES)) +
   geom_segment(aes(x=group1, xend=group1, y=0, yend=fgsea.NES)) +
@@ -100,7 +100,7 @@ h.plot1 <- h.plot.dat %>%
 
 #### Plot B/C: EOS supernatant and anti-IL% therapy ####
 h.plot2 <- h.plot.dat %>% 
-  filter(group2!='italic("Ex vivo")~"RV-infected vs media"') %>% 
+  filter(group2!='"RV-infected vs media"') %>% 
   
   ggplot(aes(x=group1, y=fgsea.NES)) +
   geom_segment(aes(x=group1, xend=group1, y=0, yend=fgsea.NES)) +
