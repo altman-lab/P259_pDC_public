@@ -13,8 +13,8 @@ library(ggplot2)
 library(shiny)
 
 #### Data prep ####
-# # Expression data
-# attach("P259_pDC_clean.RData")
+# Expression data
+# attach("data_clean/P259_pDC_clean.RData")
 # dat1 <- as.data.frame(dat.pDC.voom_1$E) %>%
 #   rownames_to_column("geneName") %>%
 #   pivot_longer(-geneName, names_to = "libID") %>%
@@ -29,12 +29,12 @@ library(shiny)
 #   pivot_longer(-geneName, names_to = "libID") %>%
 #   left_join(dat.pDC.voom_2$targets) %>%
 #   left_join(dat.pDC.voom_2$genes) %>%
-#   mutate(experiment = "anti-IL5/Ra") %>%
+#   mutate(experiment = "anti-IL5/5Ra") %>%
 #   select(experiment, cellType, libID, geneName,
 #          hgnc_symbol, IL5, virus, value) %>%
 #   rename(treatment=IL5)
 # 
-# attach("P259_EOS_clean.RData")
+# attach("data_clean/P259_EOS_clean.RData")
 # dat3 <- as.data.frame(dat.EOS.voom$E) %>%
 #   rownames_to_column("geneName") %>%
 #   pivot_longer(-geneName, names_to = "libID") %>%
@@ -59,35 +59,45 @@ library(shiny)
 #          cellType=factor(cellType, c("pDC","EOS")))
 # 
 # #FDR data
-# fdr1 <- read_csv("../results/gene_level/P259.1_gene_pval.csv") %>%
+# fdr1 <- read_csv("results/gene_level/P259.1_gene_pval.csv") %>%
 #   mutate(gene = paste0(hgnc_symbol, " (", geneName, ")")) %>%
 # 
 #   filter(group %in% c("none_HRV - none_none","EOS.supp_HRV - EOS.supp_none",
 #                       "EOS.supp_none - none_none","EOS.supp_HRV - none_HRV")) %>%
-#   mutate(contrast = recode(group,
-#                            "none_HRV - none_none"="RV in untreated",
-#                            "EOS.supp_HRV - EOS.supp_none"="RV in EOSsup",
-#                            "EOS.supp_none - none_none"="EOSsup in uninfected",
-#                            "EOS.supp_HRV - none_HRV"="EOSsup in RV infected"),
+#   mutate(between = recode(group,
+#                            "none_HRV - none_none"="RV vs none",
+#                            "EOS.supp_HRV - EOS.supp_none"="RV vs none",
+#                            "EOS.supp_none - none_none"="EOS sup vs none",
+#                            "EOS.supp_HRV - none_HRV"="EOS sup vs none"),
+#          within = recode(group,
+#                             "none_HRV - none_none"="untreated",
+#                             "EOS.supp_HRV - EOS.supp_none"="EOS sup treated",
+#                             "EOS.supp_none - none_none"="uninfected",
+#                             "EOS.supp_HRV - none_HRV"="RV infected"),
 #          experiment="EOS supernatant",
 #          cellType="pDC") %>%
 #   rename(P=P.Value, FDR=adj.P.Val) %>%
-#   select(experiment, cellType, gene, contrast, logFC, P, FDR)
+#   select(experiment, cellType, gene, between, within, logFC, P, FDR)
 # 
-# fdr2 <- read_csv("../results/gene_level/P259.2_gene_pval.csv") %>%
+# fdr2 <- read_csv("results/gene_level/P259.2_gene_pval.csv") %>%
 #   mutate(gene = paste0(hgnc_symbol, " (", geneName, ")")) %>%
 # 
 #   filter(group %in% c("none_HRV - none_none","AntiIL5_HRV - AntiIL5_none",
 #                       "AntiIL5_none - none_none","AntiIL5_HRV - none_HRV")) %>%
-#   mutate(contrast = recode(group,
-#                            "none_HRV - none_none"="RV in untreated",
-#                            "AntiIL5_HRV - AntiIL5_none"="RV in antiIL5/Ra",
-#                            "AntiIL5_none - none_none"="antiIL5/Ra in uninfected",
-#                            "AntiIL5_HRV - none_HRV"="antiIL5/Ra in RV infected"),
-#          experiment="anti-IL5/Ra",
+#   mutate(between = recode(group,
+#                           "none_HRV - none_none"="RV vs none",
+#                           "AntiIL5_HRV - AntiIL5_none"="RV vs none",
+#                           "AntiIL5_none - none_none"="AntiIL5 vs none",
+#                           "AntiIL5_HRV - none_HRV"="AntiIL5 vs none"),
+#          within = recode(group,
+#                          "none_HRV - none_none"="untreated",
+#                          "AntiIL5_HRV - AntiIL5_none"="antiIL5 treated",
+#                          "AntiIL5_none - none_none"="uninfected",
+#                          "AntiIL5_HRV - none_HRV"="RV infected"),
+#          experiment="anti-IL5/5Ra",
 #          cellType="pDC") %>%
 #   rename(P=P.Value, FDR=adj.P.Val) %>%
-#   select(experiment, cellType, gene, contrast, logFC, P, FDR)
+#   select(experiment, cellType, gene, between, within, logFC, P, FDR)
 # 
 # fdr.all <- bind_rows(fdr1,fdr2) %>%
 #   mutate(` ` = ifelse(FDR < 0.001, "***",
@@ -95,11 +105,14 @@ library(shiny)
 #                              ifelse(FDR < 0.1, "*"," ")))) %>%
 #   mutate(FDR = ifelse(FDR < 0.001, formatC(FDR, digits=2, format = "E"),
 #                                           round(FDR, digits=3))) %>%
-#   arrange(experiment,contrast)
+#   mutate(between = factor(between, c("AntiIL5 vs none", "EOS sup vs none","RV vs none")),
+#          within = factor(within, c("uninfected","RV infected",
+#                             "untreated", "antiIL5 treated", "EOS sup treated"))) %>%
+#   arrange(experiment, between, within)
 # 
 # #Genes
 # genes <- sort(unique(dat.all$gene))
-# save(dat.all, fdr.all, genes, file="boxplot_app_data.RData")
+# save(dat.all, fdr.all, genes, file="apps/boxplot_app_data.RData")
 
 #### App ####
 load("boxplot_app_data.RData")
@@ -118,8 +131,8 @@ shinyApp(
                                          label="Gene HGNC (ENSEMBL)",
                                          choices=NULL,
                                          selected=FALSE)),
-               column(4, "pDC contrast model", tableOutput("tab")),
-               column(8, "If one or more panels does not appear, this gene was not sufficiently expressed for analysis in the missing data set.", plotOutput("p1",height="400px")))
+               column(5, "pDC contrast model", tableOutput("tab1"), tableOutput("tab2")),
+               column(7, "If one or more panels does not appear, this gene was not sufficiently expressed for analysis in the missing data set.", plotOutput("p1",height="400px")))
     ),
   
   server = function(input, output, session) {
@@ -130,12 +143,21 @@ shinyApp(
                          selected = FALSE,
                          options = list(placeholder = 'gene'))
     
-    output$tab = renderTable({
-      fdr_tab <- fdr.all %>% 
+    output$tab1 = renderTable({
+      fdr_tab1 <- fdr.all %>% 
         filter(gene == input$choose_gene) %>% 
-        select(-gene,-cellType)
+        select(-gene,-cellType) %>% 
+        filter(experiment == "anti-IL5/5Ra")
       
-      fdr_tab
+      fdr_tab1
+    })
+    output$tab2 = renderTable({
+      fdr_tab2 <- fdr.all %>% 
+        filter(gene == input$choose_gene) %>% 
+        select(-gene,-cellType) %>% 
+        filter(experiment == "EOS supernatant")
+      
+      fdr_tab2
     })
     output$p1 = renderPlot({
       p1 <- dat.all %>%
